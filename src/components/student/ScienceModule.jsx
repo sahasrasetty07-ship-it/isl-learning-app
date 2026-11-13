@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { scienceLessons } from '../../data/scienceLessons';
 import { WritingPad } from './WritingPad';
 import { AssignmentBanner } from '../common/AssignmentBanner';
+import { getSignVideo } from '../../utils/video.js';
 import { 
   Atom, 
   Video, 
@@ -39,7 +40,10 @@ export const ScienceModule = () => {
       signDescription: selectedLesson.signTutorial.description,
       handShape: 'Scientific Concept Sign Sequence',
       category: selectedLesson.category,
-      videoUrl: selectedLesson.signTutorial.videoUrl
+      // Science lessons embed a direct mp4 URL from the data file
+      videoUrl: selectedLesson.signTutorial?.videoUrl || null,
+      videoStart: null,
+      videoEnd: null,
     });
   };
 

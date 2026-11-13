@@ -66,7 +66,16 @@ export const GujaratiModule = () => {
   };
 
   const openSignModal = (item) => {
-    const videoEntry = getSignVideo(item?.id);
+    // Determine the signVideos key depending on the item type.
+    // The registry resolves both the prefixed keys and the bare item id.
+    let videoKey = null;
+    if (item.id && item.letter) {
+      videoKey = `letter-${item.id}`;                 // alphabet
+    } else if (item.id && item.number) {
+      videoKey = `number-${item.id}`;                 // number
+    }
+    const videoEntry = getSignVideo(videoKey || item?.id);
+
     setActiveVideoModal({
       title: `${item.name || item.word} - ISL Sign`,
       gujarati: item.letter || item.number || item.word,
@@ -75,13 +84,14 @@ export const GujaratiModule = () => {
       handShape: item.handShape,
       meaning: item.meaning,
       category: item.category || 'Gujarati Learning',
-      videoUrl: item.videoUrl || null,
+      // Prefer the signVideos registry; fall back to the data-file field
+      videoUrl: item.videoUrl || videoEntry?.url || null,
       youtubeId: videoEntry?.youtubeId || null,
       startTime: videoEntry?.startTime ?? null,
       endTime: videoEntry?.endTime ?? null,
       status: videoEntry?.status || 'pending',
       source: videoEntry?.source || 'ISLRTC',
-      verifiedBy: videoEntry?.verifiedBy || null
+      verifiedBy: videoEntry?.verifiedBy || null,
     });
   };
 
@@ -427,13 +437,15 @@ export const GujaratiModule = () => {
                       </button>
                       <button
                         onClick={() => {
+                          // sentences don't have a signVideos key; pass through any videoUrl on the item
                           setActiveVideoModal({
                             title: s.gujarati,
                             gujarati: s.gujarati,
                             english: s.english,
                             signDescription: s.signDescription,
                             handShape: 'Sentence Sign Sequence',
-                            category: s.category
+                            category: s.category,
+                            videoUrl: s.videoUrl || null,
                           });
                         }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold hover:bg-slate-800"

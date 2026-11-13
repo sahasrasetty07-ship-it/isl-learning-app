@@ -152,13 +152,16 @@ export const MathModule = () => {
               </div>
               <button
                 onClick={() => {
+                  // Math tables don't have a dedicated signVideos key yet –
+                  // pass no videoUrl so the modal shows the text fallback gracefully.
                   setActiveVideoModal({
                     title: selectedTable.title,
                     gujarati: selectedTable.gujaratiNumeral,
                     english: `Table of ${selectedTable.number}`,
                     signDescription: selectedTable.signOverview,
                     handShape: 'Finger counting and grouping gesture',
-                    category: 'Mathematics Tables'
+                    category: 'Mathematics Tables',
+                    videoUrl: null,
                   });
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-xs font-bold transition"

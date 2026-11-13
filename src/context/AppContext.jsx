@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { initialStudentData, classStudents } from '../data/studentAnalytics';
+import { useAuth } from './AuthContext';
 
 const AppContext = createContext();
 const STUDENT_KEY = 'gsl-student-v1';
@@ -68,8 +69,38 @@ export const calculateStreak = (activityDates = [], referenceDate = new Date()) 
 };
 
 export const AppProvider = ({ children }) => {
-  // Roles: 'student' | 'teacher' | 'parent'
-  const [currentRole, setCurrentRole] = useState('student');
+  const { profile, isAllAccess } = useAuth();
+
+  // Permitted roles in the app
+  const VALID_ROLES = ['student', 'teacher', 'parent'];
+  const profileRole = (profile?.role && VALID_ROLES.includes(profile.role))
+    ? profile.role
+    : 'student';
+
+  // Selected role state for all-access users, defaulting to profile.role
+  const [selectedRole, setSelectedRole] = useState(profileRole);
+
+  // Sync selectedRole when profile.role loads or updates
+  useEffect(() => {
+    setSelectedRole(profileRole);
+  }, [profileRole]);
+
+  // Compute effectiveRole:
+  // UI convenience for all-access team members to preview different role views.
+  // Non-all-access users strictly receive their own profile.role.
+  const effectiveRole = isAllAccess
+    ? (VALID_ROLES.includes(selectedRole) ? selectedRole : profileRole)
+    : profileRole;
+
+  // Make setCurrentRole a no-op for non-all-access users
+  const setCurrentRole = (role) => {
+    if (!isAllAccess) return;
+    if (VALID_ROLES.includes(role)) {
+      setSelectedRole(role);
+    }
+  };
+
+  const canSwitchRoles = isAllAccess;
   
   // UI Language: 'en' (English default) | 'gu' (Gujarati)
   const [uiLanguage, setUiLanguage] = useState('en');
@@ -228,8 +259,9 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider
       value={{
-        currentRole,
+        currentRole: effectiveRole,
         setCurrentRole,
+        canSwitchRoles,
         uiLanguage,
         setUiLanguage,
         activeTab,

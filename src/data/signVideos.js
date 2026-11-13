@@ -2,6 +2,16 @@
 // Official Source: Indian Sign Language Research and Training Centre (ISLRTC), Government of India
 // Channel: https://www.youtube.com/@ISLRTC / https://www.youtube.com/channel/UC3AcGIlqVI4nJWCwHgHFXtg
 // Status must only be set to 'approved' after the actual demonstration has been verified.
+//
+// HOW TO ADD A VIDEO
+// ------------------
+// 1. Find the approved video on the ISLRTC YouTube channel or another authorised source.
+// 2. Paste the YouTube link (or bare 11-char ID) into `youtubeId` — or `url` for a direct mp4.
+// 3. Set `status: 'approved'` once you have verified the link plays correctly.
+// 4. Optionally set start/end (in seconds) to clip a long ISLRTC video down to one sign.
+//
+// Keys are the `id` field of the data files (e.g. 'ka', 'n1'). Lookups also accept the
+// prefixed forms 'letter-ka' / 'number-n1', and phrases use 'phrase-<slug>' keys.
 
 export const signVideos = {
   // --- Gujarati Alphabets (Consonants & Vowels) ---
@@ -282,17 +292,68 @@ export const signVideos = {
     status: 'pending',
     source: 'ISLRTC Gujarati dictionary',
     verifiedBy: null
-  }
+  },
+
+  // ─── Phrasebook (first 5 entries, keyed by Gujarati word slug) ────────────
+  // Slugs map to phrasebookData.gujarati values
+  'phrase-namaste': {
+    url: '',
+    start: null,
+    end: null,
+    status: 'pending',
+    note: 'નમસ્તે (Namaste / Hello)'
+  },
+  'phrase-aabhar': {
+    url: '',
+    start: null,
+    end: null,
+    status: 'pending',
+    note: 'આભાર (Thank You)'
+  },
+  'phrase-shubh-savar': {
+    url: '',
+    start: null,
+    end: null,
+    status: 'pending',
+    note: 'શુભ સવાર (Good Morning)'
+  },
+  'phrase-tamaru-naam': {
+    url: '',
+    start: null,
+    end: null,
+    status: 'pending',
+    note: 'તમારું નામ શું છે? (What is your name?)'
+  },
+  'phrase-hu-vidyarthi': {
+    url: '',
+    start: null,
+    end: null,
+    status: 'pending',
+    note: 'હું વિદ્યાર્થી છું (I am a student)'
+  },
 };
+
+// ─── Lookup helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Resolve a key that may come from either the id scheme ('ka', 'n1') or the
+ * prefixed scheme ('letter-ka', 'number-n1'). Phrase keys are already stable.
+ * @param {string} key
+ * @returns {string}
+ */
+const normalizeKey = (key) =>
+  key.startsWith('letter-') || key.startsWith('number-')
+    ? key.slice(key.indexOf('-') + 1)
+    : key;
 
 /**
  * Retrieve video entry by ID
- * @param {string} id - The item ID (e.g. 'ka', 'n1')
+ * @param {string} id - The item ID (e.g. 'ka', 'n1') or prefixed key ('letter-ka')
  * @returns {object|null}
  */
 export const getSignVideo = (id) => {
-  if (!id) return null;
-  return signVideos[id] || null;
+  if (!id || typeof id !== 'string') return null;
+  return signVideos[id] || signVideos[normalizeKey(id)] || null;
 };
 
 /**
@@ -314,4 +375,3 @@ export const buildYouTubeEmbedUrl = (youtubeId, startTime, endTime) => {
   }
   return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(youtubeId)}?${params.toString()}`;
 };
-
