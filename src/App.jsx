@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { useAuth } from './context/AuthContext';
+import { LoginScreen } from './components/auth/LoginScreen';
 import { Header } from './components/common/Header';
 import { Navigation } from './components/common/Navigation';
 import { SignVideoModal } from './components/common/SignVideoModal';
@@ -14,6 +16,32 @@ import { TranslatorHub } from './components/translation/TranslatorHub';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
 import { ParentDashboard } from './components/parent/ParentDashboard';
 import { CheckCircle2 } from 'lucide-react';
+
+const LoadingSpinner = () => (
+  <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="fixed inset-0 pointer-events-none overflow-hidden">
+      <div className="absolute top-1/3 -left-32 w-96 h-96 rounded-full bg-amber-500/20 blur-3xl animate-pulse" />
+      <div className="absolute bottom-1/3 -right-32 w-96 h-96 rounded-full bg-indigo-500/20 blur-3xl" />
+    </div>
+    <div className="glass-card-dark p-8 rounded-3xl border border-white/10 flex flex-col items-center gap-4 relative z-10 shadow-2xl">
+      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-amber-500/30 border border-amber-300/40 animate-pulse">
+        સ
+      </div>
+      <div className="w-8 h-8 border-3 border-amber-400 border-t-transparent rounded-full animate-spin" />
+      <div className="text-center">
+        <p className="text-xs font-bold text-slate-100">
+          Saket (સાકેત)
+        </p>
+        <p className="text-[11px] text-slate-400">
+          Loading inclusive learning portal...
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+// Student tab IDs - must remain unchanged
+export const STUDENT_TABS = ['dashboard', 'learn', 'gujarati', 'math', 'science', 'translator', 'report'];
 
 const MainContent = () => {
   const { currentRole, activeTab, toastMessage } = useApp();
@@ -96,6 +124,23 @@ const MainContent = () => {
 };
 
 export default function App() {
+  const { user, profile, loading, signInWithGoogle, signInAsDemo, isConfigured } = useAuth();
+
+  // If auth is initializing or profile hasn't loaded yet, show the loading state
+  if (loading || (user && !profile)) {
+    return <LoadingSpinner />;
+  }
+
+  if (!user) {
+    return (
+      <LoginScreen
+        signInWithGoogle={signInWithGoogle}
+        signInAsDemo={signInAsDemo}
+        isConfigured={isConfigured}
+      />
+    );
+  }
+
   return (
     <AppProvider>
       <MainContent />
