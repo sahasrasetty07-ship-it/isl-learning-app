@@ -3,16 +3,234 @@ import { useApp } from '../../context/AppContext';
 import { buildYouTubeEmbedUrl } from '../../data/signVideos';
 import { X, Volume2, ShieldCheck, AlertCircle, Hand } from 'lucide-react';
 
+// Singleton loader for the YouTube IFrame Player API
+let ytApiPromise = null;
+const loadYouTubeIframeApi = () => {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (window.YT && window.YT.Player) {
+    return Promise.resolve(window.YT);
+  }
+  if (!ytApiPromise) {
+    ytApiPromise = new Promise((resolve) => {
+      // 4-second fallback in case network blocks the script
+      const timeout = setTimeout(() => {
+        resolve(window.YT || null);
+      }, 4000);
+
+      const prevCallback = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        clearTimeout(timeout);
+        if (typeof prevCallback === 'function') {
+          try { prevCallback(); } catch (_) {}
+        }
+        resolve(window.YT);
+      };
+
+      if (!document.getElementById('youtube-iframe-api')) {
+        const tag = document.createElement('script');
+        tag.id = 'youtube-iframe-api';
+        tag.src = 'https://www.youtube.com/iframe_api';
+        tag.onerror = () => {
+          clearTimeout(timeout);
+          resolve(null);
+        };
+        const firstScript = document.getElementsByTagName('script')[0];
+        if (firstScript && firstScript.parentNode) {
+          firstScript.parentNode.insertBefore(tag, firstScript);
+        } else {
+          document.head.appendChild(tag);
+        }
+      }
+    });
+  }
+  return ytApiPromise;
+};
+
+// Eagerly initiate loading the API script when module is parsed
+if (typeof window !== 'undefined') {
+  loadYouTubeIframeApi();
+}
+
 export const SignVideoModal = () => {
   const { activeVideoModal, setActiveVideoModal, speakText, uiLanguage } = useApp();
   const isEn = uiLanguage === 'en';
 
   const [playbackRate, setPlaybackRate] = useState(1);
   const videoRef = useRef(null);
+  const ytContainerRef = useRef(null);
+  const playerRef = useRef(null);
 
+  const targetYoutubeId = (() => {
+    if (!activeVideoModal) return null;
+    if (activeVideoModal.youtubeId && typeof activeVideoModal.youtubeId === 'string') {
+      return activeVideoModal.youtubeId;
+    }
+    const url = activeVideoModal.videoUrl;
+    if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+      const match = url.match(/(?:youtu\.be\/|watch\?v=|embed\/)([\w-]{11})/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return null;
+  })();
+
+  const isDirectVideo = Boolean(
+    activeVideoModal?.videoUrl &&
+    !activeVideoModal.videoUrl.includes('youtube.com') &&
+    !activeVideoModal.videoUrl.includes('youtu.be')
+  );
+
+  // Reset playbackRate to 1 on video change
   useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = playbackRate;
-  }, [playbackRate, activeVideoModal]);
+    setPlaybackRate(1);
+  }, [activeVideoModal?.youtubeId, activeVideoModal?.videoUrl]);
+
+  // Synchronize playback rate
+  useEffect(() => {
+    if (playerRef.current && typeof playerRef.current.setPlaybackRate === 'function') {
+      try {
+        playerRef.current.setPlaybackRate(playbackRate);
+      } catch (_) {}
+    }
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
+
+  // YouTube player initialization, autoplay, and continuous segment looping
+  useEffect(() => {
+    if (!targetYoutubeId || !ytContainerRef.current) return;
+
+    let isCleanedUp = false;
+    let player = null;
+    let pollInterval = null;
+    let isSeeking = false;
+
+    const startSec = typeof activeVideoModal?.startTime === 'number' &&
+      !isNaN(activeVideoModal.startTime) &&
+      activeVideoModal.startTime >= 0
+        ? activeVideoModal.startTime
+        : 0;
+
+    const endSec = typeof activeVideoModal?.endTime === 'number' &&
+      !isNaN(activeVideoModal.endTime) &&
+      activeVideoModal.endTime > 0
+        ? activeVideoModal.endTime
+        : null;
+
+    loadYouTubeIframeApi().then((YT) => {
+      if (isCleanedUp || !ytContainerRef.current) return;
+
+      if (!YT || !YT.Player) {
+        // Fallback: render embed iframe with distraction-free parameters directly
+        const embedUrl = buildYouTubeEmbedUrl(targetYoutubeId, startSec, endSec);
+        if (embedUrl && ytContainerRef.current) {
+          ytContainerRef.current.innerHTML = `
+            <iframe
+              src="${embedUrl}"
+              title="ISL Sign Demonstration"
+              class="w-full h-full rounded-2xl bg-black border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+            ></iframe>
+          `;
+        }
+        return;
+      }
+
+      // Create a mount node for YT.Player to replace
+      ytContainerRef.current.innerHTML = '';
+      const mountNode = document.createElement('div');
+      mountNode.style.width = '100%';
+      mountNode.style.height = '100%';
+      ytContainerRef.current.appendChild(mountNode);
+
+      player = new YT.Player(mountNode, {
+        videoId: targetYoutubeId,
+        width: '100%',
+        height: '100%',
+        playerVars: {
+          autoplay: 1,
+          mute: 1,
+          controls: 0,
+          rel: 0,
+          modestbranding: 1,
+          fs: 0,
+          iv_load_policy: 3,
+          disablekb: 1,
+          playsinline: 1,
+          cc_load_policy: 0,
+          start: Math.floor(startSec)
+        },
+        events: {
+          onReady: (event) => {
+            if (isCleanedUp) return;
+            try {
+              event.target.mute();
+              event.target.seekTo(startSec, true);
+              event.target.playVideo();
+              if (playbackRate !== 1) {
+                event.target.setPlaybackRate(playbackRate);
+              }
+            } catch (_) {}
+          },
+          onStateChange: (event) => {
+            if (isCleanedUp) return;
+            // Video reaches the end (YT.PlayerState.ENDED === 0)
+            if (event.data === 0) {
+              try {
+                event.target.seekTo(startSec, true);
+                event.target.playVideo();
+              } catch (_) {}
+            }
+          }
+        }
+      });
+
+      playerRef.current = player;
+
+      // Poll current time to loop exact timestamp segment
+      pollInterval = setInterval(() => {
+        if (isCleanedUp || !player || typeof player.getCurrentTime !== 'function') return;
+        try {
+          const currentTime = player.getCurrentTime();
+
+          // If an end timestamp is configured, repeat immediately when reached
+          if (typeof endSec === 'number' && endSec > 0) {
+            if (currentTime >= endSec) {
+              if (!isSeeking) {
+                isSeeking = true;
+                player.seekTo(startSec, true);
+                player.playVideo();
+              }
+            } else {
+              isSeeking = false;
+            }
+          }
+
+          // Initial cue safeguard: if player starts before configured start time
+          if (startSec > 0 && currentTime < startSec - 0.75 && !isSeeking) {
+            player.seekTo(startSec, true);
+          }
+        } catch (_) {}
+      }, 100);
+    });
+
+    return () => {
+      isCleanedUp = true;
+      if (pollInterval) clearInterval(pollInterval);
+      if (player) {
+        try {
+          player.destroy();
+        } catch (_) {}
+      }
+      playerRef.current = null;
+      if (ytContainerRef.current) {
+        ytContainerRef.current.innerHTML = '';
+      }
+    };
+  }, [targetYoutubeId, activeVideoModal?.startTime, activeVideoModal?.endTime]);
 
   if (!activeVideoModal) return null;
 
@@ -24,47 +242,8 @@ export const SignVideoModal = () => {
     handShape, 
     meaning, 
     verifiedBy,
-    videoUrl,
-    youtubeId,
-    startTime,
-    endTime,
     category 
   } = activeVideoModal;
-
-  // Resolve YouTube embed URL with optional start & end timestamps.
-  // A valid youtubeId plays regardless of verification status —
-  // the in-modal badge already conveys whether the sign has been reviewed.
-  const youtubeEmbedUrl = (() => {
-    if (youtubeId && typeof youtubeId === 'string') {
-      return buildYouTubeEmbedUrl(youtubeId, startTime, endTime);
-    }
-
-    if (videoUrl && (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be'))) {
-      if (videoUrl.includes('/embed/')) {
-        const url = new URL(videoUrl);
-        if (typeof startTime === 'number' && !isNaN(startTime) && startTime >= 0) {
-          url.searchParams.set('start', String(Math.floor(startTime)));
-        }
-        if (typeof endTime === 'number' && !isNaN(endTime) && endTime > 0) {
-          url.searchParams.set('end', String(Math.floor(endTime)));
-        }
-        return url.toString();
-      }
-      const match = videoUrl.match(/(?:youtu\.be\/|watch\?v=)([\w-]{11})/);
-      if (match && match[1]) {
-        return buildYouTubeEmbedUrl(match[1], startTime, endTime);
-      }
-      return videoUrl;
-    }
-
-    return null;
-  })();
-
-  const isDirectVideo = Boolean(
-    videoUrl &&
-    !videoUrl.includes('youtube.com') &&
-    !videoUrl.includes('youtu.be')
-  );
 
   const handleSpeech = () => {
     if (gujarati) speakText(gujarati);
@@ -99,20 +278,18 @@ export const SignVideoModal = () => {
         <div className="overflow-y-auto">
           {/* Video: the largest element */}
           <div className="bg-ink p-3 sm:p-4 flex flex-col items-center gap-3">
-            {youtubeEmbedUrl ? (
-              <iframe
-                key={youtubeEmbedUrl}
-                src={youtubeEmbedUrl}
-                title={heading}
-                className="w-full aspect-video rounded-2xl bg-black border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
+            {targetYoutubeId ? (
+              <div className="w-full aspect-video rounded-2xl bg-black overflow-hidden relative flex items-center justify-center">
+                <div
+                  ref={ytContainerRef}
+                  className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:border-0 [&>iframe]:rounded-2xl"
+                />
+              </div>
             ) : isDirectVideo ? (
               <video
                 ref={videoRef}
-                key={videoUrl}
-                src={videoUrl}
+                key={activeVideoModal.videoUrl}
+                src={activeVideoModal.videoUrl}
                 autoPlay
                 loop
                 muted

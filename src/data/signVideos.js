@@ -306,6 +306,15 @@ export const buildYouTubeEmbedUrl = (youtubeId, startTime, endTime) => {
   if (!youtubeId || typeof youtubeId !== 'string') return null;
   const params = new URLSearchParams();
   params.set('rel', '0');
+  params.set('autoplay', '1');
+  params.set('mute', '1');
+  params.set('controls', '0');
+  params.set('modestbranding', '1');
+  params.set('fs', '0');
+  params.set('iv_load_policy', '3');
+  params.set('disablekb', '1');
+  params.set('playsinline', '1');
+  params.set('enablejsapi', '1');
   if (typeof startTime === 'number' && !isNaN(startTime) && startTime >= 0) {
     params.set('start', String(Math.floor(startTime)));
   }
