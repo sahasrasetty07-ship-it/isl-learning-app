@@ -39,3 +39,26 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- ==============================================================================
+-- 6. Translation Usage History (Optional & Non-blocking)
+-- ==============================================================================
+create table if not exists public.translation_history (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  mode text not null check (mode in ('text-to-sign', 'speech-to-sign', 'sign-to-text')),
+  input_text text not null,
+  created_at timestamptz default now()
+);
+
+-- Enable Row Level Security (RLS)
+alter table public.translation_history enable row level security;
+
+-- Users can insert their own translation events (or authenticated users)
+create policy "Users can insert own translation history" on public.translation_history
+  for insert with check (auth.uid() = user_id or user_id is null);
+
+-- Users can only read their own translation history
+create policy "Users read own translation history" on public.translation_history
+  for select using (auth.uid() = user_id);
+
+

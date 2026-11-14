@@ -1,274 +1,393 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import { useApp } from '../../context/AppContext';
-import { phrasebookData } from '../../data/phrasebookData';
-import { gujaratiAlphabets } from '../../data/gujaratiAlphabets';
-import { gujaratiNumbers } from '../../data/gujaratiNumbers';
+import { useAuth } from '../../context/AuthContext';
+import {
+  isSTTSupported,
+  startListening,
+  getSpeechErrorMessage,
+} from '../../utils/speech';
+import {
+  toSignSequence,
+  calculateCoverage,
+  normalizeGujarati,
+} from '../../utils/signMatcher';
+import { logTranslationHistory } from '../../utils/translationHistory';
+import { SignSequencePlayer } from './SignSequencePlayer';
 import {
   Mic,
   MicOff,
   Sparkles,
+  ArrowRight,
+  Layers,
+  AlertCircle,
+  AlertTriangle,
+  RotateCcw,
   Volume2,
-  Video,
+  Globe,
+  Radio,
+  FileEdit,
   CheckCircle2,
-  AlertCircle
 } from 'lucide-react';
 
-// Normalize text for consistent matching: Unicode NFC, strip punctuation, collapse whitespace
-const stripPunct = (s) =>
-  (s || '')
-    .normalize('NFC')
-    .replace(/[,।.?!:;"]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-// Pre-compiled list of verified dictionary items from project data.
-// Note: Individual alphabet letters (ક, ખ, ગ) are intentionally omitted because
-// gujaratiAlphabets only contains concept signs for example words (કમળ, ખલ), not ISL letter signs.
-const buildApprovedDictionary = () => {
-  const dict = [];
-  const seen = new Set();
-
-  // 1. Curated Multi-word & Single-word Phrases (highest priority)
-  phrasebookData.forEach(p => {
-    const key = stripPunct(p.gujarati);
-    if (key && !seen.has(key)) {
-      seen.add(key);
-      dict.push({
-        gujarati: p.gujarati,
-        english: p.english,
-        signDescription: p.signDescription,
-        handShape: p.handShape || null,
-        meaning: p.meaning || null,
-        category: p.category || 'અભિવાદન/વાક્ય',
-        matchType: 'phrase'
-      });
-    }
-  });
-
-  // 2. Verified ISL Number Signs (words like એક, બે and numerals ૧, ૨)
-  gujaratiNumbers.forEach(n => {
-    const keyWord = stripPunct(n.word);
-    if (keyWord && !seen.has(keyWord)) {
-      seen.add(keyWord);
-      dict.push({
-        gujarati: n.word,
-        english: n.englishWord,
-        signDescription: n.signDescription,
-        handShape: n.handShape || null,
-        meaning: `${n.englishNumber} - ${n.objectName || ''}`,
-        category: 'સંખ્યા (Numbers)',
-        matchType: 'number'
-      });
-    }
-    const keyNum = stripPunct(n.number);
-    if (keyNum && !seen.has(keyNum)) {
-      seen.add(keyNum);
-      dict.push({
-        gujarati: n.number,
-        english: `${n.word} (${n.englishNumber})`,
-        signDescription: n.signDescription,
-        handShape: n.handShape || null,
-        meaning: n.objectName || null,
-        category: 'સંખ્યા (Numbers)',
-        matchType: 'number'
-      });
-    }
-  });
-
-  // 3. Verified Concept Words from Alphabet curriculum (e.g. કમળ, ખલ, ગણપતિ, ઘર)
-  // Only the concept word is added since signDescription represents the object, not the letter.
-  gujaratiAlphabets.forEach(a => {
-    if (a.word) {
-      const keyWord = stripPunct(a.word);
-      if (keyWord && !seen.has(keyWord)) {
-        seen.add(keyWord);
-        dict.push({
-          gujarati: a.word,
-          english: a.wordEnglish || a.word,
-          signDescription: a.signDescription,
-          handShape: a.handShape || null,
-          meaning: a.meaning || null,
-          category: a.category || 'શબ્દ (Word)',
-          matchType: 'word'
-        });
-      }
-    }
-  });
-
-  // Sort longest first so multi-word phrases match before individual words
-  return dict.sort((a, b) => stripPunct(b.gujarati).length - stripPunct(a.gujarati).length);
-};
-
-const APPROVED_DICTIONARY = buildApprovedDictionary();
-
-// Reliable longest-phrase matcher with exact boundary matching (prevents false matches like "ના" inside "નામ")
-export const matchSpeechToSigns = (rawText) => {
-  if (!rawText || !rawText.trim()) {
-    return { matches: [], unmatchedWords: [] };
-  }
-
-  const normalized = stripPunct(rawText);
-  let rest = ` ${normalized} `;
-  const found = [];
-
-  APPROVED_DICTIONARY.forEach(item => {
-    const phrase = stripPunct(item.gujarati);
-    if (!phrase) return;
-    const target = ` ${phrase} `;
-    let pos = rest.indexOf(target);
-    while (pos !== -1) {
-      found.push({ item, pos });
-      // Mask out the matched portion with spaces so it cannot be re-matched
-      rest = rest.slice(0, pos + 1) + ' '.repeat(phrase.length) + rest.slice(pos + 1 + phrase.length);
-      pos = rest.indexOf(target);
-    }
-  });
-
-  // Preserve the order of speech in the sentence
-  const matches = found.sort((a, b) => a.pos - b.pos).map(f => f.item);
-  const unmatchedWords = rest.split(/\s+/).filter(Boolean);
-
-  return { matches, unmatchedWords };
-};
-
 export const SpeechToSign = () => {
-  const { setActiveVideoModal, speakText, showToast, uiLanguage } = useApp();
+  const { uiLanguage, showToast } = useApp();
+  const { user } = useAuth();
   const isEn = uiLanguage === 'en';
+  const inputId = useId();
 
-  const [isListening, setIsListening] = useState(false);
-  const [spokenText, setSpokenText] = useState('');
-  const [matchedSigns, setMatchedSigns] = useState([]);
-  const [unmatchedWords, setUnmatchedWords] = useState([]);
-  const [speechSupported, setSpeechSupported] = useState(true);
-  const recognitionRef = useRef(null);
+  // Language options
+  const LANGUAGES = [
+    { code: 'gu-IN', label: isEn ? 'Gujarati (ગુજરાતી)' : 'ગુજરાતી (gu-IN)' },
+    { code: 'hi-IN', label: isEn ? 'Hindi (हिन्दी)' : 'હિન્દી (hi-IN)' },
+    { code: 'en-IN', label: isEn ? 'English (Indian)' : 'અંગ્રેજી (en-IN)' },
+  ];
 
+  const [selectedLang, setSelectedLang] = useState('gu-IN');
+
+  // STT States: 'idle' | 'listening' | 'processing' | 'error'
+  const [sttState, setSttState] = useState('idle');
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  // Transcript states
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const [finalTranscript, setFinalTranscript] = useState('');
+
+  // Sign Sequence and Coverage
+  const [sequence, setSequence] = useState([]);
+  const [coverage, setCoverage] = useState(null);
+
+  // Fallback Whisper recording
+  const fallbackUrl = import.meta.env.VITE_STT_FALLBACK_URL || '';
+  const [isRecordingFallback, setIsRecordingFallback] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  // Active listener session reference
+  const listenerRef = useRef(null);
+
+  const browserSupportsSTT = isSTTSupported();
+
+  // Stop listening when unmounting
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'gu-IN';
-
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setSpokenText(transcript);
-        processSpeech(transcript);
-        setIsListening(false);
-      };
-
-      recognition.onerror = (event) => {
-        console.warn('Speech recognition error:', event.error);
-        setIsListening(false);
-        showToast(
-          isEn
-            ? 'Microphone or online STT unavailable in this browser. Try the quick test phrases below.'
-            : 'માઈક્રોફોન અથવા વાણી ઓળખ ઉપલબ્ધ નથી. નીચે આપેલા પ્રીસેટ વાક્યો વાપરો.',
-          'info'
-        );
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
-    } else {
-      setSpeechSupported(false);
-    }
+    return () => {
+      if (listenerRef.current) {
+        listenerRef.current.stop();
+      }
+    };
   }, []);
 
-  const toggleListening = () => {
-    if (isListening) {
-      if (recognitionRef.current) recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch (e) {
-          setIsListening(false);
-        }
-      } else {
-        showToast(
-          isEn
-            ? 'Browser speech recognition (gu-IN) is not supported in this browser. Please use quick test phrases below or Text to Sign.'
-            : 'આ બ્રાઉઝરમાં ગુજરાતી સ્પીચ રેકગ્નિશન સપોર્ટેડ નથી. નીચે આપેલા ટેસ્ટ વાક્યો અથવા ટેક્સ્ટ-ટુ-સાઇન વાપરો.',
-          'info'
-        );
+  // Handle native Web Speech API listening
+  const handleToggleListening = () => {
+    if (sttState === 'listening') {
+      if (listenerRef.current) {
+        listenerRef.current.stop();
+        listenerRef.current = null;
       }
-    }
-  };
-
-  const handleSelectTestPhrase = (text) => {
-    setSpokenText(text);
-    processSpeech(text);
-  };
-
-  const processSpeech = (text) => {
-    if (!text || !text.trim()) {
-      setMatchedSigns([]);
-      setUnmatchedWords([]);
+      setSttState('idle');
       return;
     }
-    const { matches, unmatchedWords: unmatched } = matchSpeechToSigns(text);
-    setMatchedSigns(matches);
-    setUnmatchedWords(unmatched);
+
+    if (!browserSupportsSTT) {
+      setErrorMessage(
+        isEn
+          ? 'Browser speech recognition is not supported in this browser. Please use Google Chrome or Edge.'
+          : 'આ બ્રાઉઝરમાં સ્પીચ રેકગ્નિશન ઉપલબ્ધ નથી. કૃપા કરીને Google Chrome અથવા Edge વાપરો.'
+      );
+      setSttState('error');
+      return;
+    }
+
+    setErrorMessage(null);
+    setInterimTranscript('');
+    setSttState('listening');
+
+    listenerRef.current = startListening({
+      lang: selectedLang,
+      onInterim: (text) => {
+        setInterimTranscript(text);
+      },
+      onFinal: (text) => {
+        setFinalTranscript(text);
+        setInterimTranscript('');
+      },
+      onError: (err) => {
+        setSttState('error');
+        const userMsg = getSpeechErrorMessage(err.error, uiLanguage);
+        setErrorMessage(userMsg);
+        showToast(userMsg, 'error');
+      },
+      onEnd: () => {
+        setSttState('idle');
+        setInterimTranscript('');
+      },
+    });
+  };
+
+  // Convert transcript to sign sequence
+  const handleConvert = (text = finalTranscript) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      showToast(
+        isEn ? 'Please speak or enter text first.' : 'કૃપા કરીને પહેલાં બોલો અથવા ટેક્સ્ટ લખો.',
+        'info'
+      );
+      return;
+    }
+
+    // Non-blocking history logging
+    logTranslationHistory('speech-to-sign', trimmed, user?.id);
+
+    const seq = toSignSequence(trimmed);
+    setSequence(seq);
+    setCoverage(calculateCoverage(seq));
+  };
+
+  // Preset quick test phrases
+  const handleSelectPreset = (phrase) => {
+    setFinalTranscript(phrase);
+    setInterimTranscript('');
+    handleConvert(phrase);
+  };
+
+  // Fallback MediaRecorder Whisper audio upload
+  const handleToggleFallbackRecording = async () => {
+    if (!fallbackUrl) return;
+
+    if (isRecordingFallback) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecordingFallback(false);
+      setSttState('processing');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await sendAudioToFallback(audioBlob);
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecordingFallback(true);
+      setSttState('listening');
+    } catch (err) {
+      setSttState('error');
+      setErrorMessage(
+        isEn ? 'Microphone permission denied or unavailable.' : 'માઇક્રોફોન મંજૂરી નકારાઈ અથવા ઉપલબ્ધ નથી.'
+      );
+    }
+  };
+
+  const sendAudioToFallback = async (blob) => {
+    setSttState('processing');
+    try {
+      const formData = new FormData();
+      formData.append('audio', blob, 'audio.webm');
+      formData.append('language', selectedLang.slice(0, 2));
+
+      const res = await fetch(fallbackUrl, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const data = await res.json();
+      const transcript = data.transcript || data.text || '';
+
+      if (transcript) {
+        setFinalTranscript(transcript);
+        handleConvert(transcript);
+        setSttState('idle');
+      } else {
+        throw new Error('Empty transcript returned');
+      }
+    } catch (err) {
+      setSttState('error');
+      setErrorMessage(
+        isEn
+          ? `Fallback transcription failed: ${err.message}`
+          : `ઓડિયો ટ્રાન્સક્રિપ્શન નિષ્ફળ: ${err.message}`
+      );
+    }
   };
 
   return (
     <div className="space-y-4">
-      {/* Mic Input Container */}
+      {/* Microphone Main Control Box */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm text-center space-y-4">
-        <div>
-          <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-            {isEn ? 'Gujarati Speech → ISL Sign' : 'ગુજરાતી વાણી → સાઇન લેંગ્વેજ'}
-          </span>
-          <h3 className="text-lg font-black text-slate-900 mt-1">
-            {isEn ? 'Speak in Gujarati to Generate Sign Language' : 'ગુજરાતીમાં બોલો અને સાઇન સંકેત મેળવો'}
-          </h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto mt-0.5">
-            {isEn
-              ? 'Spoken Gujarati is transcribed to text and mapped directly to approved ISL sign guides.'
-              : 'ગુજરાતી અવાજ આપોઆપ લખાણમાં રૂપાંતરિત થઈને અધિકૃત ISL સંકેતો દર્શાવશે.'}
-          </p>
+        {/* Header and Language Selector */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+          <div className="text-left">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
+              {isEn ? 'Speech Recognition → ISL' : 'ગુજરાતી વાણી → સાઇન લેંગ્વેજ'}
+            </span>
+            <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1">
+              {isEn ? 'Speak to Generate ISL Sign Language' : 'બોલો અને સાઇન સંકેત મેળવો'}
+            </h3>
+          </div>
+
+          {/* Language Selector */}
+          <div className="flex items-center gap-1.5 self-start sm:self-center bg-slate-100 p-1 rounded-xl">
+            <Globe className="w-3.5 h-3.5 text-slate-500 ml-1.5 shrink-0" />
+            <select
+              value={selectedLang}
+              onChange={(e) => setSelectedLang(e.target.value)}
+              aria-label={isEn ? 'Select speech recognition language' : 'ભાષા પસંદ કરો'}
+              className="bg-transparent text-xs font-bold text-slate-700 py-1 px-2 focus:outline-none"
+            >
+              {LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Mic Button Subtitle */}
+        {/* Large Accessible Microphone Button */}
         <div className="py-2">
           <button
-            onClick={toggleListening}
-            className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-all shadow-xl active:scale-95 ${
-              isListening
-                ? 'bg-rose-500 text-white ring-8 ring-rose-200 animate-record-pulse'
-                : 'bg-gradient-to-tr from-purple-600 to-indigo-600 text-white hover:opacity-90 shadow-purple-600/30'
+            type="button"
+            onClick={browserSupportsSTT ? handleToggleListening : handleToggleFallbackRecording}
+            aria-label={
+              sttState === 'listening'
+                ? isEn
+                  ? 'Stop listening'
+                  : 'સાંભળવાનું બંધ કરો'
+                : isEn
+                ? 'Start speaking'
+                : 'માઇક દબાવી બોલો'
+            }
+            className={`min-h-[80px] min-w-[80px] w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-all shadow-xl active:scale-95 focus-visible:ring-4 focus-visible:ring-purple-400 ${
+              sttState === 'listening'
+                ? 'bg-rose-500 text-white ring-8 ring-rose-200 animate-pulse'
+                : sttState === 'processing'
+                ? 'bg-amber-500 text-white animate-spin'
+                : 'bg-gradient-to-tr from-purple-600 via-indigo-600 to-purple-700 text-white hover:opacity-95 shadow-purple-500/30'
             }`}
           >
-            {isListening ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
+            {sttState === 'listening' ? (
+              <MicOff className="w-8 h-8" />
+            ) : sttState === 'processing' ? (
+              <RotateCcw className="w-8 h-8" />
+            ) : (
+              <Mic className="w-8 h-8" />
+            )}
           </button>
-          <p className="text-xs font-bold text-slate-600 mt-3">
-            {isListening
-              ? (isEn ? 'Listening in Gujarati (gu-IN)... Speak now' : 'સાંભળી રહ્યા છીએ... બોલો')
-              : (isEn ? 'Tap mic to speak Gujarati voice' : 'માઇક દબાવી ગુજરાતીમાં બોલો')}
-          </p>
+
+          {/* Dynamic Waveform & State Status Label */}
+          <div className="mt-3">
+            {sttState === 'listening' && (
+              <div className="flex items-center justify-center gap-1 my-2" aria-hidden="true">
+                <span className="w-1.5 h-6 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1.5 h-10 bg-purple-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1.5 h-4 bg-purple-400 rounded-full animate-bounce" />
+                <span className="w-1.5 h-8 bg-purple-600 rounded-full animate-bounce [animation-delay:-0.2s]" />
+                <span className="w-1.5 h-5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.1s]" />
+              </div>
+            )}
+
+            <p
+              className="text-xs font-bold text-slate-700"
+              aria-live="polite"
+            >
+              {sttState === 'listening'
+                ? isEn
+                  ? 'Listening... Speak clearly into your microphone'
+                  : 'સાંભળી રહ્યા છીએ... કૃપા કરીને માઇકમાં સ્પષ્ટ બોલો'
+                : sttState === 'processing'
+                ? isEn
+                  ? 'Processing audio...'
+                  : 'ઓડિયો પ્રોસેસિંગ ચાલુ છે...'
+                : isEn
+                ? 'Tap microphone to speak'
+                : 'માઇક દબાવી ગુજરાતીમાં બોલો'}
+            </p>
+          </div>
         </div>
 
-        {!speechSupported && (
-          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 text-xs">
-            {isEn
-              ? 'Browser speech recognition (gu-IN) is not available in this browser. You can click the test phrases below to test sign matching.'
-              : 'તમારા બ્રાઉઝરમાં ગુજરાતી વાણી ઓળખ ઉપલબ્ધ નથી. સાઇન સંકેત જોવા માટે નીચેના ટેસ્ટ વાક્યો વાપરો.'}
+        {/* Live Interim Transcript Display */}
+        {interimTranscript && (
+          <div
+            className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-left"
+            aria-live="polite"
+          >
+            <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider block">
+              {isEn ? 'Live Interim Transcript:' : 'લાઈવ વચગાળાની વાણી:'}
+            </span>
+            <p lang="gu" className="text-sm font-semibold text-purple-950 mt-0.5 animate-pulse">
+              {interimTranscript} ...
+            </p>
+          </div>
+        )}
+
+        {/* Error Notice */}
+        {errorMessage && (
+          <div
+            className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-left flex items-start gap-2.5"
+            role="alert"
+          >
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-rose-800">
+              <strong>{isEn ? 'Speech Error: ' : 'વાણી ભૂલ: '}</strong>
+              {errorMessage}
+            </div>
+          </div>
+        )}
+
+        {/* Browser Unsupported Notice */}
+        {!browserSupportsSTT && (
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-left text-xs text-amber-900 space-y-1">
+            <div className="flex items-center gap-1.5 font-bold">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                {isEn
+                  ? 'Browser Web Speech API not supported in this browser'
+                  : 'આ બ્રાઉઝરમાં વેબ સ્પીચ રેકગ્નિશન સપોર્ટેડ નથી'}
+              </span>
+            </div>
+            <p className="text-slate-600">
+              {isEn
+                ? 'Web Speech API is best supported in Google Chrome and Microsoft Edge on desktop and Android. You can test sign matching using the preset phrases below.'
+                : 'Google Chrome અથવા Microsoft Edge વાપરવાની ભલામણ છે. તમે નીચે આપેલા પ્રીસેટ વાક્યો પર ક્લિક કરીને સાઇન મેચિંગ ચકાસી શકો છો.'}
+            </p>
+
+            {fallbackUrl && (
+              <button
+                type="button"
+                onClick={handleToggleFallbackRecording}
+                className="mt-2 min-h-[38px] px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs inline-flex items-center gap-1.5 transition"
+              >
+                <Radio className="w-3.5 h-3.5" />
+                <span>
+                  {isRecordingFallback
+                    ? isEn
+                      ? 'Stop & Transcribe (Whisper)'
+                      : 'રેકોર્ડિંગ બંધ કરો (Whisper)'
+                    : isEn
+                    ? 'Record via Whisper Fallback'
+                    : 'Whisper સર્વિસ દ્વારા રેકોર્ડ કરો'}
+                </span>
+              </button>
+            )}
           </div>
         )}
 
         {/* Quick Test Phrases */}
-        <div className="border-t border-slate-100 pt-3">
+        <div className="pt-2 border-t border-slate-100">
           <span className="text-[11px] font-bold text-slate-400 block mb-1.5">
-            {isEn ? 'Quick Test Phrases (click to test sign lookup):' : 'ઝડપી ટેસ્ટ વાક્યો (સાઇન સંકેત જોવા ક્લિક કરો):'}
+            {isEn ? 'Quick Test Phrases (click to test sign lookup):' : 'ઝડપી ટેસ્ટ વાક્યો (ક્લિક કરી સાઇન મેળવો):'}
           </span>
           <div className="flex flex-wrap items-center justify-center gap-1.5">
             {[
@@ -277,180 +396,117 @@ export const SpeechToSign = () => {
               'હું વિદ્યાર્થી છું',
               'શુભ સવાર',
               'કમળ અને ઘર',
-              'એક બે ત્રણ'
-            ].map(txt => (
+              'એક બે ત્રણ',
+            ].map((txt) => (
               <button
                 key={txt}
-                onClick={() => handleSelectTestPhrase(txt)}
-                className="text-[11px] bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-900 px-3 py-1 rounded-full transition border border-slate-200"
+                type="button"
+                onClick={() => handleSelectPreset(txt)}
+                className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700 transition border border-slate-200"
               >
-                {txt}
+                <span lang="gu">{txt}</span>
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Recognized Speech Result */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500 uppercase">
-            {isEn ? 'Recognized Gujarati Speech:' : 'ઓળખાયેલ ગુજરાતી વાણી:'}
+      {/* Editable Final Transcript Card */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+          <label
+            htmlFor={inputId}
+            className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5"
+          >
+            <FileEdit className="w-3.5 h-3.5 text-purple-600" />
+            {isEn ? 'Recognized Speech (Editable):' : 'ઓળખાયેલ ગુજરાતી વાણી (તપાસો અને સંપાદિત કરો):'}
+          </label>
+          <span className="text-[10px] text-slate-400 font-semibold">
+            {isEn ? 'Review before converting' : 'રૂપાંતર પહેલાં સુધારી શકો છો'}
           </span>
-          {spokenText && (
-            <button
-              onClick={() => speakText(spokenText)}
-              className="text-xs text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>{isEn ? 'Replay Speech' : 'ફરી સાંભળો'}</span>
-            </button>
-          )}
         </div>
-        {spokenText ? (
-          <p className="text-base font-bold text-slate-900 bg-purple-50/50 p-3 rounded-xl border border-purple-200">
-            {spokenText}
-          </p>
-        ) : (
-          <p className="text-xs text-slate-400 italic p-3 rounded-xl border border-dashed border-slate-200">
-            {isEn
-              ? 'No speech captured yet. Tap the mic or choose a test phrase above.'
-              : 'હજુ કોઈ વાણી પકડાઈ નથી. માઇક દબાવો અથવા ઉપરથી ટેસ્ટ વાક્ય પસંદ કરો.'}
-          </p>
-        )}
+
+        <textarea
+          id={inputId}
+          lang="gu"
+          value={finalTranscript}
+          onChange={(e) => setFinalTranscript(e.target.value)}
+          placeholder={
+            isEn
+              ? 'Spoken transcript appears here. You can edit any word before converting...'
+              : 'બોલાયેલ લખાણ અહીં દેખાશે. રૂપાંતર કરતાં પહેલાં તમે કોઈપણ શબ્દ સુધારી શકો છો...'
+          }
+          rows={3}
+          className="w-full p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium leading-relaxed resize-y"
+        />
+
+        {/* Convert Button */}
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={() => handleConvert()}
+            disabled={!finalTranscript.trim()}
+            className="min-h-[44px] flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs sm:text-sm shadow-md disabled:opacity-40 disabled:pointer-events-none transition active:scale-95 focus-visible:ring-2 focus-visible:ring-purple-500"
+          >
+            <span>{isEn ? 'Convert Speech to Sign' : 'વાણીનું સાઇનમાં રૂપાંતર કરો'}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Matched Sign Language Sequences */}
-      <div className="bg-slate-900 text-white rounded-2xl border border-slate-800 p-4 shadow-lg space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <h4 className="text-sm font-bold text-white flex items-center gap-2">
-            <Video className="w-4 h-4 text-purple-400" />
-            <span>{isEn ? 'Matched ISL Sign Sequences' : 'મેળવાયેલા સાઇન સંકેતો'}</span>
-          </h4>
-          <span className="text-xs text-slate-400">
-            {matchedSigns.length} {isEn ? 'signs mapped' : 'સાઇન ઉપલબ્ધ'}
-          </span>
-        </div>
-
-        {/* No Direct Match State */}
-        {matchedSigns.length === 0 && spokenText && (
-          <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 text-center space-y-2.5">
-            <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-            <p className="text-sm font-bold text-amber-300">
-              {isEn
-                ? 'No matching signs found in dictionary.'
-                : 'આ વાણી માટે શબ્દકોષમાં કોઈ સંકેત મળ્યો નથી.'}
-            </p>
-            {unmatchedWords.length > 0 && (
-              <p className="text-xs text-slate-300 max-w-sm mx-auto">
-                {isEn ? 'Unsupported words: ' : 'ઉપલબ્ધ ન હોય તેવા શબ્દો: '}
-                <span className="font-semibold text-slate-200">{unmatchedWords.join(', ')}</span>
-              </p>
-            )}
-            <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">
-              {isEn
-                ? 'The current dictionary covers curated greetings, school phrases, numbers (1-10), and select vocabulary words. Additional signs will be added in future updates.'
-                : 'હાલનો શબ્દકોષ મુખ્ય અભિવાદન, શાળા વાક્યો, અંકો (૧-૧૦) અને પસંદગીના શબ્દો આવરી લે છે. વધુ સંકેતો ભવિષ્યમાં ઉમેરવામાં આવશે.'}
-            </p>
+      {/* Coverage Summary Banner */}
+      {coverage && (
+        <div
+          className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3"
+          aria-live="polite"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-purple-600" />
+              {isEn ? 'Spoken Text Sign Coverage' : 'વાણી લખાણ સાઇન કવરેજ'}
+            </span>
+            <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
+              {coverage.coveragePercent}% {isEn ? 'Covered' : 'સંપૂર્ણ'}
+            </span>
           </div>
-        )}
 
-        {/* Idle prompt before speech */}
-        {matchedSigns.length === 0 && !spokenText && (
-          <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-xs text-slate-400">
-            {isEn
-              ? 'Speak into the mic or select a test phrase to display matching ISL signs.'
-              : 'સાઇન સંકેતો જોવા માટે માઇકમાં બોલો અથવા ટેસ્ટ વાક્ય પસંદ કરો.'}
-          </div>
-        )}
-
-        {/* Matched Sign Grid */}
-        {matchedSigns.length > 0 && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {matchedSigns.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex flex-col justify-between space-y-2.5"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <h5 className="font-extrabold text-amber-300 text-sm">{item.gujarati}</h5>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          item.matchType === 'phrase'
-                            ? 'bg-purple-900/60 text-purple-200 border border-purple-500/30'
-                            : item.matchType === 'number'
-                            ? 'bg-blue-900/60 text-blue-200 border border-blue-500/30'
-                            : 'bg-emerald-900/60 text-emerald-200 border border-emerald-500/30'
-                        }`}
-                      >
-                        {item.matchType === 'phrase'
-                          ? (isEn ? 'Full Phrase' : 'વાક્ય સંકેત')
-                          : item.matchType === 'number'
-                          ? (isEn ? 'Number' : 'સંખ્યા સંકેત')
-                          : (isEn ? 'Word' : 'શબ્દ સંકેત')}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                      <span>{item.english}</span>
-                      <span>•</span>
-                      <span className="text-slate-500">{item.category}</span>
-                    </div>
-
-                    <p className="text-xs text-slate-200 leading-relaxed font-medium pt-0.5">
-                      {item.signDescription}
-                    </p>
-
-                    {item.handShape && (
-                      <p className="text-[11px] text-amber-300/90 font-medium">
-                        ✋ {item.handShape}
-                      </p>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setActiveVideoModal({
-                        title: item.gujarati,
-                        gujarati: item.gujarati,
-                        english: item.english,
-                        signDescription: item.signDescription,
-                        handShape: item.handShape,
-                        meaning: item.meaning,
-                        category: item.category
-                      });
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition mt-1 active:scale-95"
-                  >
-                    <Video className="w-3.5 h-3.5" />
-                    <span>{isEn ? 'View Sign Guide' : 'સાઇન માર્ગદર્શિકા જુઓ'}</span>
-                  </button>
-                </div>
-              ))}
+          {/* Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div className="bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl">
+              <span className="text-[10px] text-slate-500 font-bold block uppercase">
+                {isEn ? 'Total Words' : 'કુલ શબ્દો'}
+              </span>
+              <span className="text-lg font-black text-slate-900">{coverage.totalWords}</span>
             </div>
 
-            {/* Notice for unsupported words in an otherwise matched sentence */}
-            {unmatchedWords.length > 0 && (
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-amber-300">
-                    {isEn ? 'Unsupported words:' : 'શબ્દકોષમાં ઉપલબ્ધ ન હોય તેવા શબ્દો:'}
-                  </span>{' '}
-                  <span className="font-semibold text-slate-200">{unmatchedWords.join(', ')}</span>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {isEn
-                      ? 'These words are currently not in the curated sign dictionary.'
-                      : 'આ શબ્દો માટે હાલના શબ્દકોષમાં સંકેત ઉપલબ્ધ નથી.'}
-                  </p>
-                </div>
-              </div>
-            )}
+            <div className="bg-emerald-50 border border-emerald-200/80 p-2.5 rounded-xl">
+              <span className="text-[10px] text-emerald-700 font-bold block uppercase">
+                {isEn ? 'Matched Signs' : 'માન્ય સંકેતો'}
+              </span>
+              <span className="text-lg font-black text-emerald-800">{coverage.matchedWords}</span>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200/80 p-2.5 rounded-xl">
+              <span className="text-[10px] text-purple-700 font-bold block uppercase">
+                {isEn ? 'Fingerspelled' : 'હસ્તમુદ્રા'}
+              </span>
+              <span className="text-lg font-black text-purple-800">{coverage.fingerspelledWords}</span>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200/80 p-2.5 rounded-xl">
+              <span className="text-[10px] text-rose-700 font-bold block uppercase">
+                {isEn ? 'Unsupported' : 'અસમર્થિત'}
+              </span>
+              <span className="text-lg font-black text-rose-800">{coverage.unsupportedWords}</span>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Main Sign Sequence Player */}
+      {sequence.length > 0 && (
+        <SignSequencePlayer sequence={sequence} />
+      )}
     </div>
   );
 };
