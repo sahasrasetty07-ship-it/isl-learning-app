@@ -282,6 +282,90 @@ export const signVideos = {
     status: 'pending',
     source: 'ISLRTC Gujarati dictionary',
     verifiedBy: null
+  },
+
+  // --- Gujarati Sentences ---
+  s1: {
+    id: 's1',
+    type: 'sentence',
+    gujarati: 'હું શાળાએ જાઉં છું.',
+    english: 'I go to school.',
+    youtubeId: 'Vj9f28LogHA',
+    startTime: null,
+    endTime: null,
+    status: 'approved',
+    source: 'ISLRTC',
+    verifiedBy: 'ISLRTC'
+  },
+  s2: {
+    id: 's2',
+    type: 'sentence',
+    gujarati: 'મને પાણી આપો.',
+    english: 'Please give me water.',
+    youtubeId: 'RsFOMlrt9YI',
+    startTime: null,
+    endTime: null,
+    status: 'approved',
+    source: 'ISLRTC',
+    verifiedBy: 'ISLRTC'
+  },
+  s3: {
+    id: 's3',
+    type: 'sentence',
+    gujarati: 'આજે ગણિત શીખવું છે.',
+    english: 'Today we will learn Maths.',
+    youtubeId: 'W2MXeV4ADGw',
+    startTime: null,
+    endTime: null,
+    status: 'approved',
+    source: 'ISLRTC',
+    verifiedBy: 'ISLRTC'
+  },
+
+  // --- Science Lessons ---
+  'solar-system': {
+    id: 'solar-system',
+    type: 'science',
+    title: 'સૂર્યમંડળ (Solar System)',
+    youtubeId: 'jG6_puADw4o',
+    startTime: 26,
+    endTime: null,
+    status: 'approved',
+    source: 'YouTube',
+    verifiedBy: 'ISLRTC / Educator'
+  },
+  photosynthesis: {
+    id: 'photosynthesis',
+    type: 'science',
+    title: 'પ્રકાશસંશ્લેષણ (Photosynthesis)',
+    youtubeId: 'ASxCxYfICPM',
+    startTime: null,
+    endTime: null,
+    status: 'approved',
+    source: 'YouTube',
+    verifiedBy: 'ISLRTC / Educator'
+  },
+  'water-cycle': {
+    id: 'water-cycle',
+    type: 'science',
+    title: 'જળચક્ર (The Water Cycle)',
+    youtubeId: 'u4-qz8b-GCg',
+    startTime: null,
+    endTime: null,
+    status: 'approved',
+    source: 'YouTube',
+    verifiedBy: 'ISLRTC / Educator'
+  },
+  'matter-states': {
+    id: 'matter-states',
+    type: 'science',
+    title: 'દ્રવ્યની ત્રણ અવસ્થાઓ (States of Matter)',
+    youtubeId: '7g7rFrWiVjQ',
+    startTime: null,
+    endTime: null,
+    status: 'approved',
+    source: 'YouTube',
+    verifiedBy: 'ISLRTC / Educator'
   }
 };
 

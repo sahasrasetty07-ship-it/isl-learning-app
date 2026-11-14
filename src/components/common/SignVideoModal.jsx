@@ -207,6 +207,18 @@ export const SignVideoModal = () => {
             } else {
               isSeeking = false;
             }
+          } else {
+            // For full-length / open-ended videos without an end timestamp, loop when reaching duration
+            const duration = typeof player.getDuration === 'function' ? player.getDuration() : 0;
+            if (duration > 0 && currentTime >= duration - 0.3) {
+              if (!isSeeking) {
+                isSeeking = true;
+                player.seekTo(startSec, true);
+                player.playVideo();
+              }
+            } else if (currentTime < (duration > 0 ? duration - 1 : 1)) {
+              isSeeking = false;
+            }
           }
 
           // Initial cue safeguard: if player starts before configured start time
