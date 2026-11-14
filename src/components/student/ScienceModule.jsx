@@ -1,22 +1,30 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { scienceLessons } from '../../data/scienceLessons';
 import { WritingPad } from './WritingPad';
 import { AssignmentBanner } from '../common/AssignmentBanner';
-import { 
-  Atom, 
-  Video, 
-  Sparkles, 
-  Volume2, 
-  CheckCircle2, 
-  XCircle, 
-  BookOpen, 
-  PenTool, 
-  Lightbulb 
+import { PageHeader, Tabs, Chip, Card, IconButton, SignVideoButton, Button } from '../ui';
+import {
+  Volume2,
+  CheckCircle2,
+  XCircle,
+  BookOpen,
+  PenTool,
+  Lightbulb,
+  Hand,
+  FlaskConical,
+  Orbit,
+  Sprout,
+  CloudRain,
+  Snowflake,
+  ArrowRight
 } from 'lucide-react';
 
+// Lesson id -> icon (replaces the emoji in the lesson data)
+const LESSON_ICONS = { 'solar-system': Orbit, photosynthesis: Sprout, 'water-cycle': CloudRain, 'matter-states': Snowflake };
+
 export const ScienceModule = () => {
-  const { setActiveVideoModal, speakText, recordExerciseSuccess, recordExerciseAttempt, activeAssignment, uiLanguage } = useApp();
+  const { setActiveVideoModal, speakText, recordExerciseSuccess, recordExerciseAttempt, activeAssignment, uiLanguage, setActiveTab: setAppTab } = useApp();
   const isEn = uiLanguage === 'en';
   
   // A science assignment opens straight into that lesson's quiz
@@ -66,252 +74,175 @@ export const ScienceModule = () => {
     resetQuiz();
   };
 
-  return (
-    <div className="space-y-4 pb-6">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
-        <div className="relative z-10">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30">
-            {isEn ? 'Applied Science Education' : 'પ્રાયોગિક વિજ્ઞાન શિક્ષણ'}
-          </span>
-          <h2 className="text-xl sm:text-2xl font-black mt-1">
-            {isEn ? 'General Science with ISL Signs' : 'સામાન્ય વિજ્ઞાન અને પ્રકૃતિ'}
-          </h2>
-          <p className="text-xs sm:text-sm text-emerald-100 max-w-md mt-1">
-            {isEn 
-              ? 'Key science concepts explained through certified ISL sign tutorials, diagrams, and writing practice.' 
-              : 'વિજ્ઞાનના અગત્યના નિયમો ISL સાઇન ટ્યુટોરિયલ્સ, ચિત્રો અને લેખન અભ્યાસ સાથે સમજો.'}
-          </p>
-        </div>
-        <div className="absolute -right-4 -bottom-6 text-7xl opacity-20 select-none">
-          🔬
-        </div>
-      </div>
+  const LessonIcon = LESSON_ICONS[selectedLesson.id] || FlaskConical;
 
-      {/* Lesson Horizontal Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        onBack={() => setAppTab('learn')}
+        backLabel={isEn ? 'Learn' : 'શીખો'}
+        icon={FlaskConical}
+        tone="science"
+        title={isEn ? 'Science' : 'વિજ્ઞાન'}
+        subtitle={isEn ? 'Science lessons with signs, writing and a quiz' : 'સંકેતો, લેખન અને ક્વિઝ સાથે વિજ્ઞાનના પાઠ'}
+      />
+
+      {/* Lesson picker */}
+      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label={isEn ? 'Choose a lesson' : 'પાઠ પસંદ કરો'}>
         {scienceLessons.map(lesson => {
-          const isSelected = selectedLesson.id === lesson.id;
+          const Icon = LESSON_ICONS[lesson.id] || FlaskConical;
           return (
-            <button
+            <Chip
               key={lesson.id}
+              active={selectedLesson.id === lesson.id}
               onClick={() => {
                 setSelectedLesson(lesson);
                 setQuestionIdx(0);
                 resetQuiz();
               }}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
-                isSelected
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
             >
-              <span className="text-base">{lesson.icon}</span>
-              <span>{lesson.title}</span>
-            </button>
+              <Icon className="w-4 h-4" aria-hidden="true" />
+              {lesson.title}
+            </Chip>
           );
         })}
       </div>
 
-      {/* Lesson View Sub-Tabs */}
-      <div className="flex items-center gap-1.5 bg-slate-200/80 p-1 rounded-xl">
-        <button
-          onClick={() => setActiveTab('concept')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
-            activeTab === 'concept'
-              ? 'bg-white text-emerald-700 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>{isEn ? 'Concept & Signs' : 'ખ્યાલ અને સંકેતો'}</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('write')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
-            activeTab === 'write'
-              ? 'bg-white text-emerald-700 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <PenTool className="w-4 h-4" />
-          <span>{isEn ? 'Writing Practice' : 'લેખન કસોટી'}</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('quiz')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
-            activeTab === 'quiz'
-              ? 'bg-white text-emerald-700 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Lightbulb className="w-4 h-4" />
-          <span>{isEn ? 'Comprehension Quiz' : 'મૂલ્યાંકન (Quiz)'}</span>
-        </button>
-      </div>
+      <Tabs
+        label={isEn ? 'Lesson parts' : 'પાઠના ભાગ'}
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { id: 'concept', icon: BookOpen, label: isEn ? 'Learn' : 'ખ્યાલ' },
+          { id: 'write', icon: PenTool, label: isEn ? 'Write' : 'લેખન' },
+          { id: 'quiz', icon: Lightbulb, label: isEn ? 'Quiz' : 'ક્વિઝ' }
+        ]}
+      />
 
       {/* ===================== TAB 1: CONCEPT & SIGNS ===================== */}
       {activeTab === 'concept' && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{selectedLesson.icon}</span>
-                  <h3 className="text-xl font-black text-slate-900">{selectedLesson.title}</h3>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">{selectedLesson.subtitle}</p>
-              </div>
+        <Card className="space-y-5">
+          <SignVideoButton
+            onClick={openSignModal}
+            label={isEn ? 'Watch the sign tutorial' : 'સંકેત ટ્યુટોરિયલ જુઓ'}
+            sublabel={selectedLesson.signTutorial.title}
+          />
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => speakText(selectedLesson.summary)}
-                  className="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
-                  title={isEn ? "Pronounce Summary" : "સારાંશ બોલો"}
-                >
-                  <Volume2 className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={openSignModal}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition"
-                >
-                  <Video className="w-4 h-4 text-emerald-400" />
-                  <span>{isEn ? 'Watch Sign Video' : 'ટ્યુટોરિયલ વિડીયો'}</span>
-                </button>
-              </div>
+          <div className="flex items-start gap-3">
+            <span className="w-12 h-12 shrink-0 rounded-2xl bg-science-soft text-science flex items-center justify-center">
+              <LessonIcon className="w-6 h-6" aria-hidden="true" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-2xl font-bold leading-tight">{selectedLesson.title}</h2>
+              <p className="text-ink-muted">{selectedLesson.subtitle}</p>
             </div>
-
-            {/* Concept Summary */}
-            <div className="bg-emerald-50/60 border border-emerald-200 p-4 rounded-xl">
-              <h4 className="text-xs font-bold text-emerald-900 uppercase tracking-wider mb-1">
-                {isEn ? 'Scientific Concept Overview' : 'મુખ્ય વિજ્ઞાન ખ્યાલ'}
-              </h4>
-              <p className="text-sm text-slate-800 leading-relaxed font-medium">
-                {selectedLesson.summary}
-              </p>
-            </div>
-
-            {/* ISL Sign Description Tutorial */}
-            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-600" />
-                  {selectedLesson.signTutorial.title}
-                </span>
-                <span className="text-[10px] bg-white px-2 py-0.5 rounded text-amber-800 border border-amber-300 font-bold">
-                  {isEn ? 'Sign Tutorial' : 'સાઇન ટ્યુટોરિયલ'}
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-800 font-medium leading-relaxed">
-                {selectedLesson.signTutorial.description}
-              </p>
-            </div>
-
-            {/* Key Terminology with Signs Grid */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                {isEn ? 'Key Terminology & ISL Gestures:' : 'અગત્યના પારિભાષિક શબ્દો અને સંકેતો:'}
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {selectedLesson.keyTerms.map((term, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200"
-                  >
-                    <span className="text-2xl">{term.icon}</span>
-                    <div>
-                      <h5 className="font-bold text-xs text-slate-900">{term.gujarati}</h5>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Sign: {term.sign}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Scientific Facts */}
-            <div className="border-t border-slate-100 pt-3">
-              <h4 className="text-xs font-bold text-slate-700 mb-1.5">
-                {isEn ? 'Key Scientific Facts:' : 'રસપ્રદ વૈજ્ઞાનિક તથ્યો:'}
-              </h4>
-              <ul className="space-y-1">
-                {selectedLesson.facts.map((fact, idx) => (
-                  <li key={idx} className="text-xs text-slate-600 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>{fact}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <IconButton onClick={() => speakText(selectedLesson.summary)} label={isEn ? 'Listen to summary' : 'સારાંશ સાંભળો'}>
+              <Volume2 className="w-5 h-5" aria-hidden="true" />
+            </IconButton>
           </div>
-        </div>
+
+          <Button onClick={() => setActiveTab('quiz')} className="w-full min-h-[52px] text-base">
+            {isEn ? 'Take the quiz' : 'ક્વિઝ આપો'}
+            <ArrowRight className="w-5 h-5" aria-hidden="true" />
+          </Button>
+
+          <div className="rounded-xl bg-science-soft p-4">
+            <h3 className="font-sans text-sm font-bold text-science mb-1">{isEn ? 'What it means' : 'મુખ્ય ખ્યાલ'}</h3>
+            <p className="leading-relaxed">{selectedLesson.summary}</p>
+          </div>
+
+          <div className="rounded-xl bg-canvas border border-line p-4 space-y-1">
+            <h3 className="font-sans text-sm font-bold flex items-center gap-1.5">
+              <Hand className="w-4 h-4 text-action" aria-hidden="true" />
+              {selectedLesson.signTutorial.title}
+            </h3>
+            <p className="text-sm leading-relaxed">{selectedLesson.signTutorial.description}</p>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-bold mb-2">{isEn ? 'Key words and their signs' : 'મુખ્ય શબ્દો અને સંકેતો'}</h3>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {selectedLesson.keyTerms.map((term, idx) => (
+                <li key={idx} className="p-3 rounded-xl bg-canvas border border-line">
+                  <p className="font-bold">{term.gujarati}</p>
+                  <p className="text-sm text-ink-muted mt-0.5">{isEn ? 'Sign:' : 'સંકેત:'} {term.sign}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="border-t border-line pt-4">
+            <h3 className="text-lg font-bold mb-2">{isEn ? 'Facts' : 'રસપ્રદ તથ્યો'}</h3>
+            <ul className="space-y-1.5">
+              {selectedLesson.facts.map((fact, idx) => (
+                <li key={idx} className="text-sm flex items-start gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-science mt-2 shrink-0" aria-hidden="true" />
+                  <span>{fact}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Card>
       )}
 
       {/* ===================== TAB 2: WRITING PRACTICE ===================== */}
       {activeTab === 'write' && (
-        <div className="space-y-4">
-          <WritingPad
-            targetLetter={selectedLesson.title.split(' ')[0]}
-            targetWord={selectedLesson.title}
-            letterMeaning={selectedLesson.subtitle}
-            onSignClick={openSignModal}
-            subject="science"
-          />
-        </div>
+        <WritingPad
+          targetLetter={selectedLesson.title.split(' ')[0]}
+          targetWord={selectedLesson.title}
+          letterMeaning={selectedLesson.subtitle}
+          onSignClick={openSignModal}
+          subject="science"
+        />
       )}
 
       {/* ===================== TAB 3: QUIZ ===================== */}
       {activeTab === 'quiz' && <AssignmentBanner subjectKey="science" />}
       {activeTab === 'quiz' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <span className="text-xs font-extrabold uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
-              {isEn ? 'Science Comprehension Check' : 'વિજ્ઞાન સમજણ કસોટી'} · {(questionIdx % selectedLesson.exercises.length) + 1}/{selectedLesson.exercises.length}
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-bold px-3 py-1 rounded-lg bg-science-soft text-science">
+              {isEn ? 'Question' : 'પ્રશ્ન'} {(questionIdx % selectedLesson.exercises.length) + 1}/{selectedLesson.exercises.length}
             </span>
-            <button
-              onClick={() => speakText(exercise.question)}
-              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
-            >
-              <Volume2 className="w-4 h-4" />
-            </button>
+            <IconButton onClick={() => speakText(exercise.question)} label={isEn ? 'Listen to question' : 'પ્રશ્ન સાંભળો'}>
+              <Volume2 className="w-5 h-5" aria-hidden="true" />
+            </IconButton>
           </div>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-center">
-            <h4 className="text-lg font-black text-slate-900">
-              {exercise.question}
-            </h4>
+          <div className="rounded-2xl bg-canvas border border-line p-5 text-center">
+            <h2 className="text-2xl font-bold">{exercise.question}</h2>
           </div>
 
-          {/* Options */}
+          {/* Options: result shown by icon + label, not colour alone */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {exercise.options.map((opt, idx) => {
               const isSelected = selectedAnswer === opt;
-              let btnStyle = 'bg-white border-2 border-slate-200 hover:border-emerald-400 text-slate-800';
-
+              const isRight = opt === exercise.correctAnswer;
+              let btnStyle = 'bg-surface border-line hover:border-science';
               if (quizSubmitted) {
-                if (opt === exercise.correctAnswer) {
-                  btnStyle = 'bg-emerald-500 border-emerald-600 text-white font-bold shadow-md';
-                } else if (isSelected) {
-                  btnStyle = 'bg-rose-500 border-rose-600 text-white font-bold shadow-md';
-                } else {
-                  btnStyle = 'bg-slate-100 border-slate-200 text-slate-400 opacity-60';
-                }
+                if (isRight) btnStyle = 'bg-success-soft border-success text-success font-bold';
+                else if (isSelected) btnStyle = 'bg-danger-soft border-danger text-danger font-bold';
+                else btnStyle = 'bg-canvas border-line text-ink-muted';
               }
 
               return (
                 <button
                   key={idx}
+                  type="button"
                   disabled={quizSubmitted}
                   onClick={() => handleQuizAnswer(opt)}
-                  className={`py-3.5 px-4 rounded-xl text-sm font-bold transition flex items-center justify-between ${btnStyle}`}
+                  className={`min-h-[56px] py-3 px-4 rounded-xl border-2 text-base font-semibold text-left transition flex items-center justify-between gap-2 ${btnStyle}`}
                 >
                   <span>{opt}</span>
-                  {quizSubmitted && opt === exercise.correctAnswer && (
-                    <CheckCircle2 className="w-5 h-5 text-white" />
+                  {quizSubmitted && isRight && (
+                    <span className="inline-flex items-center gap-1 text-sm shrink-0">
+                      <CheckCircle2 className="w-5 h-5" aria-hidden="true" />{isEn ? 'Correct' : 'સાચું'}
+                    </span>
                   )}
-                  {quizSubmitted && isSelected && opt !== exercise.correctAnswer && (
-                    <XCircle className="w-5 h-5 text-white" />
+                  {quizSubmitted && isSelected && !isRight && (
+                    <span className="inline-flex items-center gap-1 text-sm shrink-0">
+                      <XCircle className="w-5 h-5" aria-hidden="true" />{isEn ? 'Your answer' : 'તમારો જવાબ'}
+                    </span>
                   )}
                 </button>
               );
@@ -319,24 +250,22 @@ export const ScienceModule = () => {
           </div>
 
           {quizSubmitted && (
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
+            <div className="p-4 rounded-2xl bg-canvas border border-line space-y-3 animate-fade-in" aria-live="polite">
               <div>
-                <h5 className="text-sm font-bold text-emerald-900">
-                  {selectedAnswer === exercise.correctAnswer 
-                    ? (isEn ? 'Awesome! Correct Answer! (+10 Stars ⭐)' : 'અદ્ભુત! સાચો જવાબ! (+૧૦ તારા ⭐)')
-                    : (isEn ? 'Review the correct answer below:' : 'સાચો ઉત્તર જુઓ.')}
-                </h5>
-                <p className="text-xs text-emerald-800 mt-0.5">{exercise.explanation}</p>
+                <h3 className="text-lg font-bold">
+                  {selectedAnswer === exercise.correctAnswer
+                    ? (isEn ? 'Correct! (+10 stars)' : 'અદ્ભુત! સાચો જવાબ! (+૧૦ તારા)')
+                    : (isEn ? 'Look at the correct answer above.' : 'ઉપર સાચો ઉત્તર જુઓ.')}
+                </h3>
+                <p className="text-sm text-ink-muted mt-0.5">{exercise.explanation}</p>
               </div>
-              <button
-                onClick={nextQuestion}
-                className="px-4 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition self-end sm:self-auto"
-              >
-                {isEn ? 'Next Question →' : 'આગળનો પ્રશ્ન →'}
-              </button>
+              <Button onClick={nextQuestion} className="w-full min-h-[52px] text-base">
+                {isEn ? 'Next question' : 'આગળનો પ્રશ્ન'}
+                <ArrowRight className="w-5 h-5" aria-hidden="true" />
+              </Button>
             </div>
           )}
-        </div>
+        </Card>
       )}
     </div>
   );

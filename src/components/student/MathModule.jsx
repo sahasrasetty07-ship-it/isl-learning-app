@@ -1,24 +1,22 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { mathLessons, generateProblem } from '../../data/mathLessons';
 import { AssignmentBanner } from '../common/AssignmentBanner';
-import { 
-  Calculator, 
-  Table, 
-  HelpCircle, 
-  Volume2, 
-  Sparkles, 
-  CheckCircle2, 
-  XCircle, 
-  Video, 
-  Plus, 
-  Minus, 
-  X, 
-  Divide 
+import { PageHeader, Tabs, Chip, Card, IconButton, SignVideoButton, Button } from '../ui';
+import {
+  Calculator,
+  Table,
+  HelpCircle,
+  Volume2,
+  CheckCircle2,
+  XCircle,
+  Hand,
+  Delete,
+  ArrowRight
 } from 'lucide-react';
 
 export const MathModule = () => {
-  const { setActiveVideoModal, speakText, recordExerciseSuccess, recordExerciseAttempt, activeAssignment, uiLanguage } = useApp();
+  const { setActiveVideoModal, speakText, recordExerciseSuccess, recordExerciseAttempt, activeAssignment, uiLanguage, setActiveTab } = useApp();
   const isEn = uiLanguage === 'en';
   
   // Sub-tabs: 'tables' | 'operations' | 'practice'
@@ -65,204 +63,128 @@ export const MathModule = () => {
   };
 
   return (
-    <div className="space-y-4 pb-6">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
-        <div className="relative z-10">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30">
-            {isEn ? 'Math & Tables Curriculum' : 'ગણિત શિક્ષણ અને ઘડિયા'}
-          </span>
-          <h2 className="text-xl sm:text-2xl font-black mt-1">
-            {isEn ? 'Gujarati Mathematics & Arithmetic' : 'ગુજરાતી ગણિત અને ક્રિયાઓ'}
-          </h2>
-          <p className="text-xs sm:text-sm text-blue-100 max-w-md mt-1">
-            {isEn 
-              ? 'Tables (ઘડિયા), addition, subtraction, multiplication & division with ISL signs and visual counters.' 
-              : 'ઘડિયા, સરવાળો, બાદબાકી, ગુણાકાર અને ભાગાકાર ISL સંકેતો અને વિઝ્યુઅલ દાખલા સાથે.'}
-          </p>
-        </div>
-        <div className="absolute -right-4 -bottom-6 text-7xl opacity-20 select-none">
-          +−×÷
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        onBack={() => setActiveTab('learn')}
+        backLabel={isEn ? 'Learn' : 'શીખો'}
+        icon={Calculator}
+        tone="math"
+        title={isEn ? 'Maths' : 'ગણિત'}
+        subtitle={isEn ? 'Tables, operations and practice with signs' : 'સંકેતો સાથે ઘડિયા, ક્રિયાઓ અને મહાવરો'}
+      />
 
-      {/* Navigation Sub-Tabs */}
-      <div className="flex items-center gap-1.5 bg-slate-200/80 p-1 rounded-xl">
-        <button
-          onClick={() => setSubTab('tables')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
-            subTab === 'tables' 
-              ? 'bg-white text-blue-700 shadow-sm' 
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Table className="w-4 h-4" />
-          <span>{isEn ? 'Tables (ઘડિયા)' : 'ઘડિયા'}</span>
-        </button>
-
-        <button
-          onClick={() => setSubTab('operations')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
-            subTab === 'operations' 
-              ? 'bg-white text-blue-700 shadow-sm' 
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Calculator className="w-4 h-4" />
-          <span>{isEn ? 'Operations (+ - × ÷)' : 'ક્રિયાઓ'}</span>
-        </button>
-
-        <button
-          onClick={() => setSubTab('practice')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
-            subTab === 'practice' 
-              ? 'bg-white text-blue-700 shadow-sm' 
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <HelpCircle className="w-4 h-4" />
-          <span>{isEn ? 'Assessment Quiz' : 'દાખલા મહાવરો'}</span>
-        </button>
-      </div>
+      <Tabs
+        label={isEn ? 'Maths lessons' : 'ગણિતના પાઠ'}
+        value={subTab}
+        onChange={setSubTab}
+        items={[
+          { id: 'tables', icon: Table, label: isEn ? 'Tables' : 'ઘડિયા' },
+          { id: 'operations', icon: Calculator, label: isEn ? 'Operations' : 'ક્રિયાઓ' },
+          { id: 'practice', icon: HelpCircle, label: isEn ? 'Practice' : 'મહાવરો' }
+        ]}
+      />
 
       {/* ===================== SUBTAB 1: TABLES (ઘડિયા) ===================== */}
       {subTab === 'tables' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar" role="group" aria-label={isEn ? 'Choose a table' : 'ઘડિયો પસંદ કરો'}>
             {mathLessons.tables.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setSelectedTable(t)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                  selectedTable.id === t.id
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <span>{t.title}</span>
-              </button>
+              <Chip key={t.id} active={selectedTable.id === t.id} onClick={() => setSelectedTable(t)}>
+                {t.title}
+              </Chip>
             ))}
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">{selectedTable.title}</h3>
-                <p className="text-xs text-slate-500">{selectedTable.signOverview}</p>
-              </div>
-              <button
-                onClick={() => {
-                  setActiveVideoModal({
-                    title: selectedTable.title,
-                    gujarati: selectedTable.gujaratiNumeral,
-                    english: `Table of ${selectedTable.number}`,
-                    signDescription: selectedTable.signOverview,
-                    handShape: 'Finger counting and grouping gesture',
-                    category: 'Mathematics Tables'
-                  });
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-xs font-bold transition"
-              >
-                <Video className="w-4 h-4 text-blue-600" />
-                <span>{isEn ? 'Watch Sign Video' : 'ઘડિયા સાઇન વિડીયો'}</span>
-              </button>
+          <Card className="space-y-4">
+            <SignVideoButton
+              glyph={selectedTable.gujaratiNumeral}
+              label={isEn ? 'Watch the table in sign' : 'ઘડિયાનો સંકેત જુઓ'}
+              sublabel={selectedTable.title}
+              onClick={() => {
+                setActiveVideoModal({
+                  title: selectedTable.title,
+                  gujarati: selectedTable.gujaratiNumeral,
+                  english: `Table of ${selectedTable.number}`,
+                  signDescription: selectedTable.signOverview,
+                  handShape: 'Finger counting and grouping gesture',
+                  category: 'Mathematics Tables'
+                });
+              }}
+            />
+            <div>
+              <h2 className="text-2xl font-bold">{selectedTable.title}</h2>
+              <p className="text-ink-muted">{selectedTable.signOverview}</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {selectedTable.rows.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/60 border border-slate-200 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-800 font-extrabold text-sm flex items-center justify-center">
-                      {idx + 1}
-                    </span>
-                    <div>
-                      <span className="font-extrabold text-base text-slate-900">{row.exp}</span>
-                      <p className="text-xs text-slate-500 font-medium">"{row.speech}" ({row.eng})</p>
-                    </div>
+                <li key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-canvas border border-line">
+                  <span className="w-9 h-9 shrink-0 rounded-lg bg-maths-soft text-maths font-bold flex items-center justify-center tabular-nums">
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-heading text-xl font-bold leading-tight">{row.exp}</p>
+                    <p className="text-sm text-ink-muted">{row.speech} ({row.eng})</p>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
-                      {row.result}
-                    </span>
-                    <button
-                      onClick={() => speakText(row.speech)}
-                      className="p-1.5 rounded-lg bg-white hover:bg-blue-100 text-slate-700 hover:text-blue-700 border border-slate-200 transition"
-                      title={isEn ? "Pronounce" : "બોલો"}
-                    >
-                      <Volume2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                  <span className="text-sm font-semibold tabular-nums px-2 py-1 rounded-lg bg-surface border border-line">{row.result}</span>
+                  <IconButton onClick={() => speakText(row.speech)} label={isEn ? 'Say it' : 'બોલો'}>
+                    <Volume2 className="w-5 h-5" aria-hidden="true" />
+                  </IconButton>
+                </li>
               ))}
-            </div>
-          </div>
+            </ul>
+          </Card>
         </div>
       )}
 
       {/* ===================== SUBTAB 2: OPERATIONS ===================== */}
       {subTab === 'operations' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-label={isEn ? 'Choose an operation' : 'ક્રિયા પસંદ કરો'}>
             {mathLessons.operations.map(op => {
               const isSelected = selectedOp.id === op.id;
               return (
                 <button
                   key={op.id}
+                  type="button"
+                  aria-pressed={isSelected}
                   onClick={() => setSelectedOp(op)}
-                  className={`p-3 rounded-2xl border-2 flex flex-col items-center justify-center transition-all ${
-                    isSelected 
-                      ? 'bg-blue-50 border-blue-500 shadow-md ring-2 ring-blue-400/30 font-bold' 
-                      : 'bg-white border-slate-200 hover:border-blue-300'
+                  className={`min-h-[88px] p-3 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition ${
+                    isSelected ? 'bg-maths border-maths text-white' : 'bg-surface border-line hover:border-maths'
                   }`}
                 >
-                  <span className="text-3xl font-black text-blue-600 mb-1">{op.symbol}</span>
-                  <span className="text-xs font-bold text-slate-800 text-center">{op.title}</span>
+                  <span className={`font-heading text-4xl font-bold leading-none ${isSelected ? '' : 'text-maths'}`}>{op.symbol}</span>
+                  <span className={`text-sm text-center ${isSelected ? 'font-bold' : 'font-medium'}`}>{op.title}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-            <div className="flex items-start justify-between">
+          <Card className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="text-xs font-bold text-blue-600 uppercase">
-                  {isEn ? 'Arithmetic Concept' : 'મૂળભૂત ક્રિયા'}
-                </span>
-                <h3 className="text-xl font-black text-slate-900">{selectedOp.title}</h3>
-                <p className="text-sm text-slate-600 mt-1">{selectedOp.concept}</p>
+                <p className="text-sm font-semibold text-maths">{isEn ? 'Concept' : 'મૂળભૂત ક્રિયા'}</p>
+                <h2 className="text-2xl font-bold">{selectedOp.title}</h2>
+                <p className="text-ink-muted mt-1">{selectedOp.concept}</p>
               </div>
-              <button
-                onClick={() => speakText(selectedOp.title)}
-                className="p-2 rounded-xl bg-blue-100 text-blue-800 hover:bg-blue-200 transition"
-              >
-                <Volume2 className="w-5 h-5" />
-              </button>
+              <IconButton onClick={() => speakText(selectedOp.title)} label={isEn ? 'Say it' : 'બોલો'}>
+                <Volume2 className="w-5 h-5" aria-hidden="true" />
+              </IconButton>
             </div>
 
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-4 rounded-xl space-y-2">
-              <span className="text-xs font-bold text-blue-900 uppercase">
-                {isEn ? 'Visual Representation' : 'વિઝ્યુઅલ ઉદાહરણ'}
-              </span>
-              <p className="text-lg font-bold text-slate-800 tracking-wide">{selectedOp.example}</p>
-              <div className="text-2xl pt-1">{selectedOp.visual}</div>
+            <div className="rounded-xl bg-maths-soft p-4">
+              <p className="text-sm font-semibold text-maths">{isEn ? 'Example' : 'ઉદાહરણ'}</p>
+              <p className="font-heading text-3xl font-bold tracking-wide mt-1">{selectedOp.example}</p>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3">
-              <Video className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="rounded-xl bg-canvas border border-line p-4 flex items-start gap-3">
+              <Hand className="w-5 h-5 text-action shrink-0 mt-0.5" aria-hidden="true" />
               <div>
-                <h4 className="text-xs font-bold text-amber-900 uppercase">
-                  {isEn ? 'ISL Sign Method' : 'ISL સાઇન સંકેત પદ્ધતિ'}
-                </h4>
-                <p className="text-xs sm:text-sm font-medium text-slate-800 mt-1">
-                  {selectedOp.signDescription}
-                </p>
+                <h3 className="font-sans text-sm font-bold">{isEn ? 'How to sign it' : 'ISL સંકેત પદ્ધતિ'}</h3>
+                <p className="text-sm mt-1">{selectedOp.signDescription}</p>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -270,109 +192,99 @@ export const MathModule = () => {
       {subTab === 'practice' && (
         <div className="space-y-4">
           <AssignmentBanner subjectKey="math" />
-          {!assignedType && <div className="flex flex-wrap gap-2">
-            {[{ id: 'mixed', title: isEn ? 'Mixed' : 'મિશ્ર' }, ...mathLessons.operations].map(op => (
-              <button
-                key={op.id}
-                onClick={() => { setPracticeType(op.id); newProblem(op.id); }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                  practiceType === op.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {op.title}
-              </button>
-            ))}
-          </div>}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold uppercase px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
-                  {isEn ? `Question ${problemCount}` : `પ્રશ્ન ${problemCount}`}
-                </span>
-                <span className="text-xs text-slate-500 font-medium">{isEn ? 'Math Assessment' : 'ગણિત મૂલ્યાંકન'}</span>
-              </div>
-              <button
-                onClick={() => speakText(currentProblem.questionGujarati)}
-                className="p-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
-                title={isEn ? "Listen to Question" : "પ્રશ્ન બોલો"}
-              >
-                <Volume2 className="w-4 h-4" />
-              </button>
+          {!assignedType && (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar" role="group" aria-label={isEn ? 'Question type' : 'પ્રશ્ન પ્રકાર'}>
+              {[{ id: 'mixed', title: isEn ? 'Mixed' : 'મિશ્ર' }, ...mathLessons.operations].map(op => (
+                <Chip key={op.id} active={practiceType === op.id} onClick={() => { setPracticeType(op.id); newProblem(op.id); }}>
+                  {op.title}
+                </Chip>
+              ))}
+            </div>
+          )}
+
+          <Card className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-bold px-3 py-1 rounded-lg bg-maths-soft text-maths">
+                {isEn ? `Question ${problemCount}` : `પ્રશ્ન ${problemCount}`}
+              </span>
+              <IconButton onClick={() => speakText(currentProblem.questionGujarati)} label={isEn ? 'Listen to question' : 'પ્રશ્ન બોલો'}>
+                <Volume2 className="w-5 h-5" aria-hidden="true" />
+              </IconButton>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center space-y-2">
-              <div className="text-4xl sm:text-5xl font-black text-slate-900 tracking-wider">
-                {currentProblem.question}
-              </div>
-              <p className="text-sm font-bold text-slate-600 mt-2">
-                {currentProblem.questionGujarati}
-              </p>
-              <p className="text-xs text-amber-800 font-medium bg-amber-100/70 py-1 px-3 rounded-full inline-block mt-1">
-                💡 {isEn ? 'Sign Hint:' : 'સંકેત:'} {currentProblem.signHint}
-              </p>
+            <div className="rounded-2xl bg-canvas border border-line p-6 text-center space-y-2">
+              <p className="font-heading text-5xl sm:text-6xl font-bold tracking-wider">{currentProblem.question}</p>
+              <p className="font-semibold text-ink-muted">{currentProblem.questionGujarati}</p>
             </div>
+            <p className="text-sm flex items-start gap-2">
+              <Hand className="w-4 h-4 text-action shrink-0 mt-0.5" aria-hidden="true" />
+              <span><strong>{isEn ? 'Sign hint:' : 'સંકેત:'}</strong> {currentProblem.signHint}</span>
+            </p>
 
-            {/* Answer box + Gujarati digit keypad */}
-            <div className="flex items-center justify-center gap-2">
-              <div className={`min-w-[120px] px-4 py-3 rounded-2xl border-2 text-3xl font-black text-center ${
-                !isAnswered ? 'border-blue-400 bg-white text-slate-900'
-                  : isCorrect ? 'border-emerald-600 bg-emerald-500 text-white' : 'border-rose-600 bg-rose-500 text-white'
+            {/* Answer box + Gujarati digit keypad. Result shown by icon + text, not colour alone. */}
+            <div className="flex items-center justify-center gap-3" aria-live="polite">
+              <div className={`min-w-[140px] min-h-[64px] px-4 rounded-2xl border-2 font-heading text-4xl font-bold flex items-center justify-center ${
+                !isAnswered ? 'border-maths bg-surface'
+                  : isCorrect ? 'border-success bg-success-soft text-success' : 'border-danger bg-danger-soft text-danger'
               }`}>
-                {answerInput || <span className="text-slate-300">?</span>}
+                {answerInput || <span className="text-ink-muted">?</span>}
               </div>
               {isAnswered && (isCorrect
-                ? <CheckCircle2 className="w-7 h-7 text-emerald-600" />
-                : <XCircle className="w-7 h-7 text-rose-600" />)}
+                ? <span className="inline-flex items-center gap-1 font-bold text-success"><CheckCircle2 className="w-7 h-7" aria-hidden="true" />{isEn ? 'Correct' : 'સાચું'}</span>
+                : <span className="inline-flex items-center gap-1 font-bold text-danger"><XCircle className="w-7 h-7" aria-hidden="true" />{isEn ? 'Not correct' : 'ખોટું'}</span>)}
             </div>
 
-            <div className="grid grid-cols-5 gap-2 pt-1">
+            <div className="grid grid-cols-5 gap-2">
               {'૧૨૩૪૫૬૭૮૯૦'.split('').map(d => (
                 <button
                   key={d}
+                  type="button"
                   disabled={isAnswered || answerInput.length >= 3}
                   onClick={() => setAnswerInput(v => v + d)}
-                  className="py-3 rounded-xl bg-white border-2 border-slate-200 hover:border-blue-400 text-2xl font-black text-slate-800 transition active:scale-95 disabled:opacity-40"
+                  className="min-h-[56px] rounded-xl bg-surface border-2 border-line hover:border-maths font-heading text-3xl font-bold transition active:scale-95 disabled:opacity-40"
                 >
                   {d}
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                disabled={isAnswered || !answerInput}
-                onClick={() => setAnswerInput(v => v.slice(0, -1))}
-                className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition disabled:opacity-40"
-              >
-                {isEn ? '⌫ Delete' : '⌫ ભૂંસો'}
-              </button>
-              <button
-                disabled={isAnswered || !answerInput}
-                onClick={handleAnswerSubmit}
-                className="py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition disabled:opacity-40"
-              >
-                {isEn ? 'Check Answer' : 'જવાબ તપાસો'}
-              </button>
-            </div>
 
-            {isAnswered && (
-              <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in ${
-                isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-rose-50 border-rose-300 text-rose-900'
-              }`}>
-                <div>
-                  <h4 className="text-sm font-bold">
-                    {isCorrect ? (isEn ? 'Correct Answer! Well done! (+10 Stars)' : 'સાચો જવાબ! શાબાશ! (+૧૦ પોઇન્ટ્સ)') : (isEn ? 'Incorrect.' : 'ખોટો જવાબ.')}
-                  </h4>
-                  <p className="text-xs mt-0.5">{currentProblem.explanation}</p>
-                </div>
-                <button
-                  onClick={handleNextProblem}
-                  className="px-5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold transition self-end sm:self-auto shrink-0"
+            {!isAnswered ? (
+              <div className="grid grid-cols-[auto_1fr] gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={!answerInput}
+                  onClick={() => setAnswerInput(v => v.slice(0, -1))}
+                  className="min-h-[52px]"
                 >
-                  {isEn ? 'Next Problem →' : 'આગળનો દાખલો →'}
-                </button>
+                  <Delete className="w-5 h-5" aria-hidden="true" />
+                  {isEn ? 'Delete' : 'ભૂંસો'}
+                </Button>
+                <Button disabled={!answerInput} onClick={handleAnswerSubmit} className="min-h-[52px] text-base">
+                  {isEn ? 'Check answer' : 'જવાબ તપાસો'}
+                </Button>
+              </div>
+            ) : (
+              <div className={`p-4 rounded-2xl border-2 space-y-3 animate-fade-in ${
+                isCorrect ? 'bg-success-soft border-success' : 'bg-danger-soft border-danger'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {isCorrect
+                    ? <CheckCircle2 className="w-6 h-6 text-success shrink-0" aria-hidden="true" />
+                    : <XCircle className="w-6 h-6 text-danger shrink-0" aria-hidden="true" />}
+                  <div>
+                    <h3 className={`text-lg font-bold ${isCorrect ? 'text-success' : 'text-danger'}`}>
+                      {isCorrect ? (isEn ? 'Correct! Well done! (+10 stars)' : 'સાચો જવાબ! શાબાશ! (+૧૦ તારા)') : (isEn ? 'Not correct.' : 'ખોટો જવાબ.')}
+                    </h3>
+                    <p className="text-sm">{currentProblem.explanation}</p>
+                  </div>
+                </div>
+                <Button onClick={handleNextProblem} className="w-full min-h-[52px] text-base">
+                  {isEn ? 'Next question' : 'આગળનો દાખલો'}
+                  <ArrowRight className="w-5 h-5" aria-hidden="true" />
+                </Button>
               </div>
             )}
-          </div>
+          </Card>
         </div>
       )}
     </div>
