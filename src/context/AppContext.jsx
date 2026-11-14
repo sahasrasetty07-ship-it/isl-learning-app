@@ -111,8 +111,8 @@ export const AppProvider = ({ children }) => {
   // Navigation active tab for student
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Mobile device simulator container toggle (allows viewing as mobile or tablet/responsive)
-  const [isMobileFrame, setIsMobileFrame] = useState(true);
+  // Mobile device simulator container toggle (defaults to false for standard PC/responsive aspect ratio)
+  const [isMobileFrame, setIsMobileFrame] = useState(false);
   
   // Audio narration toggle (ISL accessible rule: audio is strictly optional aid)
   const [audioEnabled, setAudioEnabled] = useState(true);

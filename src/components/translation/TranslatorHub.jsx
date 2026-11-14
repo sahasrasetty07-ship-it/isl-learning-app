@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { TextToSign } from './TextToSign';
 import { SignRecognition } from './SignRecognition';
 import { SpeechToSign } from './SpeechToSign';
+import { VoiceTools } from './VoiceTools';
 import { 
   FileText, 
   Mic, 
@@ -106,24 +107,7 @@ export const TranslatorHub = () => {
         {activeTab === 'text-to-sign' && <TextToSign />}
         {activeTab === 'speech-to-sign' && <SpeechToSign />}
         {activeTab === 'sign-to-text' && <SignRecognition />}
-        {activeTab === 'voice-tools' && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center space-y-3 shadow-sm">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto text-indigo-600">
-              <Volume2 className="w-7 h-7" />
-            </div>
-            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800">
-              {isEn ? 'Subsequent Phase' : 'આગામી તબક્કો'}
-            </span>
-            <h3 className="text-lg font-black text-slate-900">
-              {isEn ? 'Voice Tools & Speech Assistance' : 'વાણી સાધનો અને સ્પીચ સહાયક'}
-            </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              {isEn
-                ? 'Voice tools including Gujarati TTS practice, pronunciation scoring, and clarity feedback will be enabled in subsequent milestones.'
-                : 'ગુજરાતી વાણી ઉચ્ચારણ મહાવરો, સ્પષ્ટતા મૂલ્યાંકન અને વોઈસ ટૂલ્સ આગામી તબક્કામાં સક્રિય કરવામાં આવશે.'}
-            </p>
-          </div>
-        )}
+        {activeTab === 'voice-tools' && <VoiceTools />}
       </div>
     </div>
   );
