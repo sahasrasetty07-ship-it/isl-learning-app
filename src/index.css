@@ -4,87 +4,22 @@
 
 @layer base {
   body {
-    font-family: 'Noto Sans Gujarati', 'Inter', system-ui, -apple-system, sans-serif;
+    @apply bg-canvas text-ink font-sans;
     touch-action: manipulation;
-    background-color: #f8fafc;
-    color: #0f172a;
   }
-}
-
-/* Glassmorphism Design System Utilities */
-@layer components {
-  /* Primary Glass Panels */
-  .glass-card {
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.65);
-    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  h1, h2, h3, h4 {
+    @apply font-heading;
   }
-
-  .glass-card-subtle {
-    background: rgba(255, 255, 255, 0.55);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
+  /* Visible keyboard focus everywhere */
+  :focus-visible {
+    outline: 3px solid #C2410C;
+    outline-offset: 2px;
   }
-
-  .glass-card-hover {
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  html {
+    scroll-behavior: smooth;
   }
-  .glass-card-hover:hover {
-    background: rgba(255, 255, 255, 0.88);
-    border-color: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
-    transform: translateY(-2px);
-  }
-
-  /* Dark Glass Panels */
-  .glass-card-dark {
-    background: rgba(15, 23, 42, 0.75);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.4), 0 1px 0 0 rgba(255, 255, 255, 0.1) inset;
-  }
-
-  /* Frosted Pills and Tabs */
-  .glass-pill {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-  }
-
-  .glass-pill-dark {
-    background: rgba(30, 41, 59, 0.6);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  /* Frosted Inputs */
-  .glass-input {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    transition: all 0.2s ease;
-  }
-  .glass-input:focus {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(245, 158, 11, 0.7);
-    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
-  }
-
-  /* Ambient Mesh Gradients in background */
-  .ambient-mesh {
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(254, 215, 170, 0.35) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(199, 210, 254, 0.35) 0px, transparent 50%),
-      radial-gradient(at 50% 100%, rgba(187, 247, 208, 0.3) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(253, 230, 138, 0.25) 0px, transparent 50%);
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
   }
 }
 
@@ -94,24 +29,19 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(241, 245, 249, 0.5);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(203, 213, 225, 0.8);
+  background: #E1E3EE;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.9);
+  background: #565A78;
 }
 
 /* Canvas drawing style */
 canvas {
   touch-action: none;
-}
-
-/* Zero horizontal overflow on phone frames */
-.overflow-x-hidden {
-  overflow-x: hidden !important;
 }
 
 /* Hide scrollbar utility */
@@ -143,4 +73,44 @@ canvas {
 
 .animate-record-pulse {
   animation: recordPulse 1.5s infinite ease-in-out;
+}
+
+/* ── Writing pad verification states ─────────────────────────────────── */
+@keyframes padTickPop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes padTickDraw {
+  from { stroke-dashoffset: 48; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes padStarIn {
+  0% { transform: translateY(8px) scale(0.5); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes padShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+@keyframes padSlideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.pad-tick-pop { animation: padTickPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.pad-tick-draw { stroke-dasharray: 48; animation: padTickDraw 0.4s 0.25s ease-out both; }
+.pad-star-in { animation: padStarIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.pad-shake { animation: padShake 0.3s ease-in-out 2; }
+.pad-slide-up { animation: padSlideUp 0.25s ease-out both; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in { animation: fadeIn 0.15s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .pad-tick-pop, .pad-tick-draw, .pad-star-in, .pad-shake, .pad-slide-up { animation: none; stroke-dasharray: none; }
 }
