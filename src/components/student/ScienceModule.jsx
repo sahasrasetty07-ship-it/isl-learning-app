@@ -47,7 +47,10 @@ export const ScienceModule = () => {
       signDescription: selectedLesson.signTutorial.description,
       handShape: 'Scientific Concept Sign Sequence',
       category: selectedLesson.category,
-      videoUrl: selectedLesson.signTutorial.videoUrl
+      videoUrl: selectedLesson.signTutorial.videoUrl,
+      youtubeId: selectedLesson.signTutorial.youtubeId ?? null,
+      startTime: selectedLesson.signTutorial.startTime ?? null,
+      endTime: selectedLesson.signTutorial.endTime ?? null
     });
   };
 
