@@ -217,7 +217,10 @@ export const sampleSentences = [
     english: 'I go to school.',
     signBreakdown: ['હું (I)', 'શાળા (School)', 'જવું (Go)'],
     signDescription: 'છાતી પર હાથ મૂકી "હું", પછી બંને હાથ જોડી "શાળા", અને આગળ હાથ લંબાવી "જવું" નો સંકેત કરો.',
-    category: 'દૈનિક વાક્યો'
+    category: 'દૈનિક વાક્યો',
+    youtubeId: 'Vj9f28LogHA',
+    startTime: null,
+    endTime: null
   },
   {
     id: 's2',
@@ -225,7 +228,10 @@ export const sampleSentences = [
     english: 'Please give me water.',
     signBreakdown: ['મને (Me)', 'પાણી (Water)', 'આપો (Give)'],
     signDescription: 'W આકારથી હોઠ પાસે પાણીનો સંકેત કરો, પછી હાથ ફેલાવી નમ્રતાથી માંગવાનો ભાવ દર્શાવો.',
-    category: 'જરૂરિયાત'
+    category: 'જરૂરિયાત',
+    youtubeId: 'RsFOMlrt9YI',
+    startTime: null,
+    endTime: null
   },
   {
     id: 's3',
@@ -233,7 +239,10 @@ export const sampleSentences = [
     english: 'Today we will learn Maths.',
     signBreakdown: ['આજે (Today)', 'ગણિત (Maths)', 'શીખવું (Learn)'],
     signDescription: 'આજનો સંકેત (બંને હાથ નીચે), આંગળીઓ પર ગણતરી (ગણિત), અને કપાળથી હથેળી તરફ હાથ (શીખવું).',
-    category: 'શાળા'
+    category: 'શાળા',
+    youtubeId: 'W2MXeV4ADGw',
+    startTime: null,
+    endTime: null
   }
 ];
 

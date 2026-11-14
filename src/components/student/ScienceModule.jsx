@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { scienceLessons } from '../../data/scienceLessons';
+import { getSignVideo } from '../../data/signVideos';
 import { WritingPad } from './WritingPad';
 import { AssignmentBanner } from '../common/AssignmentBanner';
 import { PageHeader, Tabs, Chip, Card, IconButton, SignVideoButton, Button } from '../ui';
@@ -40,6 +41,7 @@ export const ScienceModule = () => {
   const exercise = selectedLesson.exercises[questionIdx % selectedLesson.exercises.length];
 
   const openSignModal = () => {
+    const videoEntry = getSignVideo(selectedLesson.id);
     setActiveVideoModal({
       title: `${selectedLesson.title} - Science ISL Sign`,
       gujarati: selectedLesson.title,
@@ -48,9 +50,10 @@ export const ScienceModule = () => {
       handShape: 'Scientific Concept Sign Sequence',
       category: selectedLesson.category,
       videoUrl: selectedLesson.signTutorial.videoUrl,
-      youtubeId: selectedLesson.signTutorial.youtubeId ?? null,
-      startTime: selectedLesson.signTutorial.startTime ?? null,
-      endTime: selectedLesson.signTutorial.endTime ?? null
+      youtubeId: selectedLesson.signTutorial.youtubeId || videoEntry?.youtubeId || null,
+      startTime: selectedLesson.signTutorial.startTime ?? videoEntry?.startTime ?? null,
+      endTime: selectedLesson.signTutorial.endTime ?? videoEntry?.endTime ?? null,
+      status: videoEntry?.status || 'approved'
     });
   };
 

@@ -1,7 +1,9 @@
+import { Fragment } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Logo, LanguageSwitch, ROLE_OPTIONS } from '../common/Header';
 import { Button } from '../ui';
-import { ArrowRight, PenLine, Calculator, FlaskConical, Languages, Hand, Volume2 } from 'lucide-react';
+import { getSignOfTheDay } from '../../data/dailySign';
+import { ArrowRight, PenLine, Calculator, FlaskConical, Languages, Volume2 } from 'lucide-react';
 
 const ROLE_TEXT = {
   student: {
@@ -42,8 +44,9 @@ const COVERS = [
 ];
 
 export const LandingPage = ({ onEnter }) => {
-  const { uiLanguage, setUiLanguage, setCurrentRole } = useApp();
+  const { uiLanguage, setUiLanguage, setCurrentRole, speakText } = useApp();
   const isEn = uiLanguage === 'en';
+  const dailySign = getSignOfTheDay();
 
   const enterAs = (role) => {
     setCurrentRole(role);
@@ -74,21 +77,85 @@ export const LandingPage = ({ onEnter }) => {
             </Button>
           </div>
 
-          {/* A lesson card as it appears in the app: sign, letter, word */}
-          <div className="bg-surface border border-line rounded-3xl p-5 space-y-4" aria-hidden="true">
-            <div className="aspect-video rounded-2xl bg-ink flex flex-col items-center justify-center gap-2 text-white">
-              <Hand className="w-14 h-14" />
-              <span className="text-sm font-medium text-white/80">ISL</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="w-20 h-20 rounded-2xl bg-gujarati-soft text-gujarati flex items-center justify-center font-heading font-bold text-5xl leading-none pt-2">ક</span>
-              <div>
-                <p className="font-heading text-3xl font-bold">કમળ</p>
-                <p className="text-ink-muted">Kamal · Lotus</p>
+          {/* Sign of the Day: Interactive Step-by-Step ISL Educational Card */}
+          <div className="bg-surface border border-line rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm" aria-label={isEn ? 'Sign of the Day' : 'આજનો ISL સંકેત'}>
+            {/* Top Bar: Sign of the Day Badge & Audio button */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-action-soft text-action text-xs font-bold uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-action animate-pulse" aria-hidden="true" />
+                  {isEn ? 'Sign of the Day' : 'આજનો ISL સંકેત'}
+                </span>
+                <span className="text-xs font-semibold text-ink-muted">
+                  {isEn ? dailySign.categoryEn : dailySign.categoryGu}
+                </span>
               </div>
-              <span className="ml-auto w-11 h-11 rounded-xl border border-line flex items-center justify-center">
-                <Volume2 className="w-5 h-5" />
-              </span>
+              <button
+                type="button"
+                onClick={() => speakText(dailySign.titleGu)}
+                aria-label={isEn ? `Listen to "${dailySign.titleGu}"` : `"${dailySign.titleGu}" સાંભળો`}
+                className="w-9 h-9 rounded-xl border border-line hover:border-action/40 hover:bg-action-soft text-ink hover:text-action flex items-center justify-center transition"
+              >
+                <Volume2 className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* Prominent Sentence Display */}
+            <div className="space-y-0.5">
+              <h2 className="font-heading text-2xl sm:text-3xl font-bold text-ink leading-tight">
+                {dailySign.titleGu}
+              </h2>
+              <p className="text-base text-ink-muted font-medium">
+                "{dailySign.titleEn}"
+              </p>
+            </div>
+
+            {/* Static 3-Panel Educational Sequence Illustration */}
+            <div className="relative rounded-2xl overflow-hidden border border-line bg-canvas">
+              <img
+                src={dailySign.image}
+                alt={isEn ? `ISL sign sequence for "${dailySign.titleEn}"` : `"${dailySign.titleGu}" નો ISL સંકેત ક્રમ`}
+                className="w-full h-auto object-cover block"
+                loading="eager"
+              />
+            </div>
+
+            {/* Step-by-Step Sequence Flow */}
+            <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-1.5 pt-1">
+              {dailySign.steps.map((step, idx) => (
+                <Fragment key={step.num}>
+                  <div className="flex flex-col items-center text-center p-2 rounded-xl bg-canvas border border-line min-w-0">
+                    <span className="text-[10px] font-bold text-action font-mono tracking-tight">
+                      STEP {step.num}
+                    </span>
+                    <span className="text-sm font-bold text-ink mt-0.5 truncate w-full">
+                      {step.wordGu}
+                    </span>
+                    <span className="text-[11px] text-ink-muted leading-tight mt-0.5 hidden sm:block truncate w-full">
+                      {isEn ? step.hintEn : step.hintGu}
+                    </span>
+                  </div>
+                  {idx < dailySign.steps.length - 1 && (
+                    <ArrowRight className="w-3.5 h-3.5 text-ink-muted/60 shrink-0" aria-hidden="true" />
+                  )}
+                </Fragment>
+              ))}
+            </div>
+
+            {/* Footer: Verified ISL Badge & Call to Action */}
+            <div className="pt-2 border-t border-line flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-1.5 text-ink-muted">
+                <span className="w-1.5 h-1.5 rounded-full bg-success" aria-hidden="true" />
+                <span>{isEn ? 'Verified ISL gesture sequence' : 'પ્રમાણિત ISL સંકેત ક્રમ'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => enterAs('student')}
+                className="font-bold text-action hover:text-action-hover inline-flex items-center gap-1 transition"
+              >
+                {isEn ? 'Practice in Student Module' : 'વિદ્યાર્થી વિભાગમાં શીખો'}
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
             </div>
           </div>
         </section>

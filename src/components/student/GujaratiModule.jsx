@@ -346,13 +346,18 @@ export const GujaratiModule = () => {
                 variant="secondary"
                 className="w-full sm:w-auto"
                 onClick={() => {
+                  const videoEntry = getSignVideo(s.id);
                   setActiveVideoModal({
                     title: s.gujarati,
                     gujarati: s.gujarati,
                     english: s.english,
                     signDescription: s.signDescription,
                     handShape: 'Sentence Sign Sequence',
-                    category: s.category
+                    category: s.category,
+                    youtubeId: s.youtubeId || videoEntry?.youtubeId || null,
+                    startTime: s.startTime ?? videoEntry?.startTime ?? null,
+                    endTime: s.endTime ?? videoEntry?.endTime ?? null,
+                    status: videoEntry?.status || 'approved'
                   });
                 }}
               >
