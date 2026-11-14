@@ -1,18 +1,18 @@
-import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { 
-  Users, 
-  Sparkles, 
-  Heart, 
-  Video, 
-  Volume2, 
-  CheckCircle2, 
-  MessageSquare, 
-  Calendar 
+import { WritingAttemptsPanel } from '../common/WritingAttemptsPanel';
+import { LessonVideoProgress } from '../common/LessonVideoProgress';
+import { Card, CardTitle, IconButton, PageHeader, ProgressBar, SUBJECT_STYLES } from '../ui';
+import {
+  Heart,
+  Play,
+  Volume2,
+  Flame,
+  MessageSquareText,
+  Users
 } from 'lucide-react';
 
 export const ParentDashboard = () => {
-  const { student, setActiveVideoModal, speakText, uiLanguage } = useApp();
+  const { student, studentsList, setActiveVideoModal, speakText, uiLanguage } = useApp();
   const isEn = uiLanguage === 'en';
 
   const homePhrases = [
@@ -58,142 +58,120 @@ export const ParentDashboard = () => {
     }
   ];
 
+  const rosterEntry = studentsList.find(s => s.id === student.id);
+  const subjectBars = [
+    { key: 'gujarati', en: 'Gujarati', gu: 'ગુજરાતી ભાષા', noteEn: 'Handwriting is excellent', noteGu: 'અક્ષરલેખન ઉત્તમ છે' },
+    { key: 'math', en: 'Maths', gu: 'ગણિત શિક્ષણ', noteEn: 'Practice subtraction at home', noteGu: 'બાદબાકીમાં મદદ કરો' },
+    { key: 'science', en: 'Science', gu: 'વિજ્ઞાન ખ્યાલો', noteEn: 'Solar system signs mastered', noteGu: 'સૂર્યમંડળ સાઇન પૂર્ણ' }
+  ];
+
   return (
-    <div className="space-y-4 pb-6">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-700 via-teal-800 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
-        <div className="relative z-10">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30">
-            {isEn ? 'Parent Portal' : 'વાલી પોર્ટલ'}
+    <div className="space-y-5">
+      <PageHeader
+        icon={Users}
+        title={isEn ? 'Welcome, parent' : 'નમસ્તે, વાલીશ્રી'}
+        subtitle={isEn
+          ? "Your child's progress and signs to use at home."
+          : 'તમારા બાળકની પ્રગતિ અને ઘરે વાપરવાના સંકેતો.'}
+      />
+
+      {/* Child's progress: three bars */}
+      <Card className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold leading-tight">{student.name}</h2>
+            <p className="text-sm text-ink-muted">{student.grade} · {student.school}</p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-xl bg-canvas border border-line text-sm font-semibold">
+            <Flame className="w-4 h-4 text-action" aria-hidden="true" />
+            {student.currentStreak} {isEn ? 'day streak' : 'દિવસથી નિયમિત'}
           </span>
-          <h2 className="text-xl sm:text-2xl font-black mt-1">
-            {isEn ? 'Welcome, Parent! 👋' : 'નમસ્તે, વાલીશ્રી! 👋'}
-          </h2>
-          <p className="text-xs sm:text-sm text-emerald-100 max-w-md mt-1">
-            {isEn 
-              ? "Track your child's daily school progress and communicate easily at home without needing to know sign language." 
-              : 'તમારા બાળકની દૈનિક શાળા પ્રગતિ જુઓ અને સાઇન લેંગ્વેજ જાણ્યા વિના ઘેર સરળતાથી સંવાદ સાધો.'}
+        </div>
+        {subjectBars.map(b => {
+          const st = SUBJECT_STYLES[b.key];
+          return (
+            <div key={b.key} className="space-y-1">
+              <ProgressBar
+                label={isEn ? b.en : b.gu}
+                value={student.subjects[b.key].progress}
+                color={st.bg}
+              />
+              <p className="text-sm text-ink-muted">{isEn ? b.noteEn : b.noteGu}</p>
+            </div>
+          );
+        })}
+      </Card>
+
+      {/* Teacher's recommendation */}
+      <Card className="space-y-2 border-action">
+        <CardTitle icon={MessageSquareText} iconClass="text-action" title={isEn ? "Teacher's recommendation" : 'શિક્ષકની ભલામણ'} />
+        <p className="leading-relaxed">
+          {isEn
+            ? 'Aarav exhibits exceptional handwriting skills in Gujarati alphabets and strong grasp of Solar System signs. In Mathematics, additional practice in Subtraction and Division is recommended. Parents are advised to spend 10 minutes daily on the Subtraction Writing Pad exercises.'
+            : 'આરવ ગુજરાતી મૂળાક્ષરો અને સૂર્યમંડળના સાઇન સંકેતોમાં ખૂબ જ કુશળ છે. ગણિતમાં બાદબાકી અને ભાગાકાર માં થોડા વધુ મહાવરાની જરૂર છે. આગામી અઠવાડિયે દરરોજ ૧૦ મિનિટ બાદબાકી પેડ પ્રેક્ટિસ કરવા ભલામણ છે.'}
+        </p>
+        {rosterEntry?.weakTopic && (
+          <p className="text-sm">
+            <span className="text-ink-muted">{isEn ? 'Practise at home:' : 'ઘરે મહાવરો:'}</span>{' '}
+            <span className="font-semibold px-2 py-0.5 rounded-lg bg-action-soft">{rosterEntry.weakTopic}</span>
           </p>
-        </div>
-        <div className="absolute -right-4 -bottom-6 text-7xl opacity-20 select-none">
-          🏡
-        </div>
-      </div>
+        )}
+      </Card>
 
-      {/* Child Status Snapshot */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">👦</span>
-            <div>
-              <h3 className="font-extrabold text-base text-slate-900">{student.name}</h3>
-              <p className="text-xs text-slate-500">{student.grade} • {student.school}</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-              {student.currentStreak} {isEn ? 'Day Active Streak' : 'દિવસથી નિયમિત'}
-            </span>
-          </div>
-        </div>
-
-        {/* 3 Subject Progress Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-          <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200">
-            <span className="text-xs font-bold text-amber-900">
-              {isEn ? 'Gujarati Language' : 'ગુજરાતી ભાષા'}
-            </span>
-            <div className="text-xl font-black text-amber-800 mt-0.5">{student.subjects.gujarati.progress}%</div>
-            <p className="text-[10px] text-amber-700 mt-0.5">
-              {isEn ? 'Handwriting is excellent' : 'અક્ષરલેખન ઉત્તમ છે'}
-            </p>
-          </div>
-
-          <div className="bg-blue-50/70 p-3 rounded-xl border border-blue-200">
-            <span className="text-xs font-bold text-blue-900">
-              {isEn ? 'Mathematics' : 'ગણિત શિક્ષણ'}
-            </span>
-            <div className="text-xl font-black text-blue-800 mt-0.5">{student.subjects.math.progress}%</div>
-            <p className="text-[10px] text-blue-700 mt-0.5">
-              {isEn ? 'Practice subtraction at home' : 'બાદબાકીમાં મદદ કરો'}
-            </p>
-          </div>
-
-          <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200">
-            <span className="text-xs font-bold text-emerald-900">
-              {isEn ? 'Science Concepts' : 'વિજ્ઞાન ખ્યાલો'}
-            </span>
-            <div className="text-xl font-black text-emerald-800 mt-0.5">{student.subjects.science.progress}%</div>
-            <p className="text-[10px] text-emerald-700 mt-0.5">
-              {isEn ? 'Solar system signs mastered' : 'સૂર્યમંડળ સાઇન પૂર્ણ'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Parent-Child Communication Helper (Cheat Sheet) */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
-              <span>{isEn ? 'Household Sign Cheat-Sheet for Parents' : 'ઘર વપરાશની સરળ સાઇન શબ્દાવલિ'}</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              {isEn 
-                ? 'High-frequency signs to communicate with your deaf child without taking formal sign language courses.' 
-                : 'સાઇન ભાષા શીખ્યા વગર બાળક સાથે વાતચીત કરવાના સૌથી ઉપયોગી સંકેતો.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-2.5">
+      {/* Home signs: tap a row to play the sign */}
+      <Card className="space-y-3">
+        <CardTitle
+          icon={Heart}
+          iconClass="text-action"
+          title={isEn ? 'Signs to use at home' : 'ઘર વપરાશની સરળ સાઇન શબ્દાવલિ'}
+          subtitle={isEn
+            ? 'Tap a sign to watch it. No sign language course needed.'
+            : 'સંકેત જોવા માટે દબાવો. સાઇન ભાષા શીખ્યા વગર બાળક સાથે વાતચીત કરો.'}
+        />
+        <ul className="divide-y divide-line">
           {homePhrases.map((phrase, idx) => (
-            <div
-              key={idx}
-              className="p-3.5 rounded-xl bg-slate-50 hover:bg-emerald-50/40 border border-slate-200 transition flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5"
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-bold text-slate-900">{phrase.gujarati}</h4>
-                  <span className="text-xs text-slate-500 font-medium">({phrase.english})</span>
-                  <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
-                    {phrase.category}
-                  </span>
-                </div>
-                <p className="text-xs text-emerald-800 font-medium mt-1">
-                  👉 <strong>{isEn ? 'How to sign:' : 'કેવી રીતે સંકેત કરવો:'}</strong> {phrase.signDescription}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => speakText(phrase.gujarati)}
-                  className="p-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition"
-                  title={isEn ? "Pronounce" : "બોલો"}
-                >
-                  <Volume2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    setActiveVideoModal({
-                      title: phrase.gujarati,
-                      gujarati: phrase.gujarati,
-                      english: phrase.english,
-                      signDescription: phrase.signDescription,
-                      category: phrase.category
-                    });
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition"
-                >
-                  <Video className="w-3.5 h-3.5" />
-                  <span>{isEn ? 'Watch Sign' : 'વિડીયો જુઓ'}</span>
-                </button>
-              </div>
-            </div>
+            <li key={idx} className="flex items-center gap-2 py-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveVideoModal({
+                    title: phrase.gujarati,
+                    gujarati: phrase.gujarati,
+                    english: phrase.english,
+                    signDescription: phrase.signDescription,
+                    category: phrase.category
+                  });
+                }}
+                className="flex-1 min-w-0 flex items-center gap-3 min-h-[60px] -ml-2 px-2 rounded-xl text-left hover:bg-canvas transition"
+              >
+                <span className="w-11 h-11 shrink-0 rounded-full bg-action text-white flex items-center justify-center">
+                  <Play className="w-5 h-5 fill-white" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-heading text-lg font-bold leading-tight">{phrase.gujarati}</span>
+                  <span className="block text-sm text-ink-muted">{phrase.english} · {phrase.category}</span>
+                </span>
+              </button>
+              <IconButton onClick={() => speakText(phrase.gujarati)} label={isEn ? `Say "${phrase.english}"` : 'બોલો'}>
+                <Volume2 className="w-5 h-5" aria-hidden="true" />
+              </IconButton>
+            </li>
           ))}
-        </div>
-      </div>
+        </ul>
+      </Card>
+
+      <LessonVideoProgress
+        subtitle={isEn
+          ? 'Letters and numbers where your child has watched the sign, how-to-write and how-to-say videos.'
+          : 'જે અક્ષરો અને સંખ્યાઓના સાઇન, લખવાના અને બોલવાના વિડીયો તમારા બાળકે જોયા છે.'}
+      />
+
+      <WritingAttemptsPanel
+        limit={5}
+        subtitle={isEn
+          ? "Your child's latest letter-writing attempts and how close each one was."
+          : 'તમારા બાળકના તાજેતરના અક્ષર-લેખન પ્રયત્નો અને દરેક કેટલો સાચો હતો.'}
+      />
     </div>
   );
 };

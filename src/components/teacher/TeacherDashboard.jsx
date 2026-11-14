@@ -1,20 +1,35 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
+import { useState } from 'react';
+import { useApp, DEFAULT_WRITING_THRESHOLD } from '../../context/AppContext';
+import { WritingAttemptsPanel } from '../common/WritingAttemptsPanel';
+import { LessonVideoProgress } from '../common/LessonVideoProgress';
+import { summariseWriting } from '../../utils/writingFeedback';
 import { mathLessons } from '../../data/mathLessons';
 import { scienceLessons } from '../../data/scienceLessons';
-import { 
-  Users, 
-  PlusCircle, 
-  BookOpen, 
-  CheckCircle2, 
-  Clock, 
-  TrendingUp, 
-  Calendar, 
-  Search, 
-  Eye, 
+import { Card, CardTitle, Button, IconButton, PageHeader, ProgressBar, SUBJECT_STYLES } from '../ui';
+import {
+  PlusCircle,
+  Search,
+  Eye,
   X,
-  RotateCcw
+  RotateCcw,
+  LayoutDashboard,
+  Users,
+  Presentation,
+  ClipboardList,
+  PenLine,
+  Clapperboard,
+  ChevronRight
 } from 'lucide-react';
+
+// Side menu: in-page links, no extra state
+const SECTIONS = [
+  { id: 't-overview', icon: LayoutDashboard, en: 'Overview', gu: 'ઝાંખી' },
+  { id: 't-students', icon: Users, en: 'Students', gu: 'વિદ્યાર્થીઓ' },
+  { id: 't-teach', icon: Presentation, en: 'Teach in class', gu: 'વર્ગમાં ભણાવો' },
+  { id: 't-practice', icon: ClipboardList, en: 'Assigned practice', gu: 'આપેલ મહાવરો' },
+  { id: 't-writing', icon: PenLine, en: 'Handwriting', gu: 'લેખન' },
+  { id: 't-videos', icon: Clapperboard, en: 'Lesson videos', gu: 'પાઠ વિડીયો' }
+];
 
 // What a teacher can assign: subject -> topics (exerciseType ids understood by the student modules)
 const SUBJECTS = {
@@ -39,8 +54,11 @@ const COUNTS = [5, 10, 20];
 export const TeacherDashboard = () => {
   const {
     studentsList, student, showToast, uiLanguage, addAssignment,
-    setCurrentRole, setIsMobileFrame, setActiveTab
+    setCurrentRole, setIsMobileFrame, setActiveTab,
+    writingThreshold, setWritingThreshold
   } = useApp();
+  const liveStudentId = student.id;
+  const writingSummary = summariseWriting(student.writingAttempts, student.writingStars);
   const assignments = student.pendingAssignments.filter(a => a.count > 0);
   const completedCount = assignments.filter(a => a.status === 'પૂર્ણ').length;
   const isEn = uiLanguage === 'en';
@@ -102,269 +120,306 @@ export const TeacherDashboard = () => {
     setAssignmentTitle('');
   };
 
+  // Display only: lowest progress first so students who need help are at the top
+  const sortedStudents = [...filteredStudents].sort((a, b) => a.progress - b.progress);
+  const classAverage = studentsList.length
+    ? Math.round(studentsList.reduce((sum, s) => sum + s.progress, 0) / studentsList.length)
+    : 0;
+
+  const inputClass = 'w-full min-h-tap px-3 text-base rounded-xl border border-line bg-surface focus:outline-none focus:border-action focus:ring-2 focus:ring-action/30';
+
   return (
-    <div className="space-y-4 pb-6">
-      {/* Teacher Welcome Header */}
-      <div className="bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30">
-              {isEn ? 'Teacher Management Portal' : 'શિક્ષક પોર્ટલ'}
-            </span>
-            <h2 className="text-xl sm:text-2xl font-black mt-1">
-              {isEn ? 'Mrs. Nitaben Joshi' : 'શ્રીમતી નીતાબેન જોશી'}
-            </h2>
-            <p className="text-xs text-blue-100 mt-0.5">
-              {isEn 
-                ? 'Grade 4 - Special Needs Classroom (5 Enrolled Students)' 
-                : 'ધોરણ ૪ - પ્રજ્ઞાચક્ષુ અને મૂકબધિર વિશેષ વર્ગ (૫ વિદ્યાર્થીઓ)'}
-            </p>
-          </div>
-
-          <button
-            onClick={() => openAssignModal()}
-            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition flex items-center gap-1.5 shadow-md self-start sm:self-auto"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>{isEn ? '+ Assign New Work' : 'નવું સ્વાધ્યાય આપો'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Class Metric Highlights */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs text-center">
-          <span className="text-[11px] font-bold text-slate-500">
-            {isEn ? 'Class Average Progress' : 'વર્ગ સરેરાશ પ્રગતિ'}
-          </span>
-          <div className="text-2xl font-black text-blue-600 mt-1">78%</div>
-          <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
-            {isEn ? '+5% this month' : '+૫% આ મહિને'}
-          </p>
-        </div>
-
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs text-center">
-          <span className="text-[11px] font-bold text-slate-500">
-            {isEn ? 'Active Students' : 'કુલ સક્રિય વિદ્યાર્થીઓ'}
-          </span>
-          <div className="text-2xl font-black text-slate-800 mt-1">5 / 5</div>
-          <p className="text-[10px] text-slate-400 mt-0.5">
-            {isEn ? '100% Active' : '૧૦૦% હાજરી'}
-          </p>
-        </div>
-
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs text-center">
-          <span className="text-[11px] font-bold text-slate-500">
-            {isEn ? 'Completed Homework' : 'પૂર્ણ થયેલ સ્વાધ્યાય'}
-          </span>
-          <div className="text-2xl font-black text-emerald-600 mt-1">{completedCount} / {assignments.length}</div>
-          <p className="text-[10px] text-slate-400 mt-0.5">
-            {isEn ? 'Assignments done' : 'પૂર્ણ સ્વાધ્યાય'}
-          </p>
-        </div>
-
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs text-center">
-          <span className="text-[11px] font-bold text-slate-500">
-            {isEn ? 'Area Needing Focus' : 'મહાવરો જરૂરી ક્ષેત્ર'}
-          </span>
-          <div className="text-sm font-black text-amber-600 mt-2">
-            {isEn ? 'Subtraction & Division' : 'બાદબાકી & ભાગાકાર'}
-          </div>
-          <p className="text-[10px] text-slate-400 mt-0.5">
-            {isEn ? 'Mathematics' : 'ગણિત વિષય'}
-          </p>
-        </div>
-      </div>
-
-      {/* Teach in class: open lesson screens full-width */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
-        <div>
-          <h3 className="text-base font-bold text-slate-900">{isEn ? 'Teach in Class' : 'વર્ગમાં ભણાવો'}</h3>
-          <p className="text-xs text-slate-500">
-            {isEn ? 'Open a lesson full-screen to teach with signs, visuals and examples.' : 'સંકેતો અને ચિત્રો સાથે ભણાવવા પાઠ મોટી સ્ક્રીન પર ખોલો.'}
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {[
-            { tab: 'gujarati', icon: '🔤', en: 'Gujarati letters & numbers', gu: 'ગુજરાતી અક્ષરો અને સંખ્યા' },
-            { tab: 'math', icon: '➗', en: 'Maths: tables & operations', gu: 'ગણિત: ઘડિયા અને ક્રિયાઓ' },
-            { tab: 'science', icon: '🔬', en: 'Science lessons', gu: 'વિજ્ઞાનના પાઠ' }
-          ].map(l => (
-            <button
-              key={l.tab}
-              onClick={() => teachInClass(l.tab)}
-              className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-left transition"
-            >
-              <span className="text-2xl">{l.icon}</span>
-              <span className="text-xs font-bold text-slate-800">{isEn ? l.en : l.gu}</span>
-            </button>
+    <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-8">
+      {/* Side menu (top scroller on small screens) */}
+      <nav aria-label={isEn ? 'Teacher menu' : 'શિક્ષક મેનુ'} className="mb-5 lg:mb-0">
+        <ul className="flex lg:flex-col gap-1 overflow-x-auto no-scrollbar lg:sticky lg:top-24">
+          {SECTIONS.map(sec => (
+            <li key={sec.id} className="shrink-0">
+              <a
+                href={`#${sec.id}`}
+                className="flex items-center gap-2.5 min-h-tap px-3 rounded-xl text-sm font-semibold text-ink-muted hover:text-ink hover:bg-surface border border-transparent hover:border-line transition whitespace-nowrap"
+              >
+                <sec.icon className="w-5 h-5" aria-hidden="true" />
+                {isEn ? sec.en : sec.gu}
+              </a>
+            </li>
           ))}
-        </div>
-      </div>
+        </ul>
+      </nav>
 
-      {/* Assigned practice sets and their progress */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
-        <div>
-          <h3 className="text-base font-bold text-slate-900">{isEn ? 'Assigned Practice' : 'આપેલ મહાવરો'}</h3>
-          <p className="text-xs text-slate-500">
-            {isEn
-              ? 'Live progress of Aarav Patel (demo student). Assign a set again to repeat the practice.'
-              : 'આરવ પટેલ (ડેમો વિદ્યાર્થી)ની પ્રગતિ. મહાવરો ફરી કરાવવા ફરીથી ફાળવો.'}
-          </p>
+      <div className="space-y-6 min-w-0">
+        <div id="t-overview" className="scroll-mt-24 space-y-5">
+          <PageHeader
+            icon={Presentation}
+            title={isEn ? 'Mrs. Nitaben Joshi' : 'શ્રીમતી નીતાબેન જોશી'}
+            subtitle={isEn
+              ? 'Grade 4 - Special Needs Classroom (5 Enrolled Students)'
+              : 'ધોરણ ૪ - પ્રજ્ઞાચક્ષુ અને મૂકબધિર વિશેષ વર્ગ (૫ વિદ્યાર્થીઓ)'}
+            actions={
+              <Button onClick={() => openAssignModal()}>
+                <PlusCircle className="w-5 h-5" aria-hidden="true" />
+                {isEn ? 'Assign new work' : 'નવું સ્વાધ્યાય આપો'}
+              </Button>
+            }
+          />
+
+          {/* Three headline numbers */}
+          <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-surface border border-line rounded-2xl p-4">
+              <dt className="text-sm text-ink-muted">{isEn ? 'Class average progress' : 'વર્ગ સરેરાશ પ્રગતિ'}</dt>
+              <dd className="font-heading text-4xl font-bold tabular-nums">{classAverage}%</dd>
+            </div>
+            <div className="bg-surface border border-line rounded-2xl p-4">
+              <dt className="text-sm text-ink-muted">{isEn ? 'Students in class' : 'વર્ગના વિદ્યાર્થીઓ'}</dt>
+              <dd className="font-heading text-4xl font-bold tabular-nums">{studentsList.length}</dd>
+            </div>
+            <div className="bg-surface border border-line rounded-2xl p-4">
+              <dt className="text-sm text-ink-muted">{isEn ? 'Practice sets completed' : 'પૂર્ણ થયેલ સ્વાધ્યાય'}</dt>
+              <dd className="font-heading text-4xl font-bold tabular-nums">{completedCount} / {assignments.length}</dd>
+            </div>
+          </dl>
         </div>
-        {assignments.length === 0 && (
-          <p className="text-xs text-slate-400">{isEn ? 'No practice assigned yet.' : 'હજુ કોઈ મહાવરો આપ્યો નથી.'}</p>
-        )}
-        <div className="space-y-2">
-          {assignments.map(asg => {
-            const finished = asg.status === 'પૂર્ણ';
-            return (
-              <div key={asg.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">{asg.title}</p>
-                  <p className="text-[11px] text-slate-500">
-                    {isEn ? SUBJECTS[asg.subjectKey]?.en : asg.subject} · {isEn ? 'Due' : 'મુદત'} {asg.dueDate}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 sm:w-56">
-                  <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${finished ? 'bg-emerald-500' : 'bg-blue-600'}`}
-                      style={{ width: `${(100 * asg.done) / asg.count}%` }}
-                    />
-                  </div>
-                  <span className="text-[11px] font-bold text-slate-700 whitespace-nowrap">
-                    {asg.done}/{asg.count} · {isEn ? `${asg.correct} correct` : `${asg.correct} સાચા`}
-                  </span>
-                </div>
-                <button
-                  onClick={() => assignAgain(asg)}
-                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-[11px] transition inline-flex items-center gap-1 self-start sm:self-auto"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>{isEn ? 'Assign again' : 'ફરી ફાળવો'}</span>
-                </button>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
+          {/* Class Students Roster */}
+          <Card id="t-students" className="scroll-mt-24 space-y-4 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+              <CardTitle
+                title={isEn ? 'Students' : 'વર્ગના વિદ્યાર્થીઓ અને પ્રગતિ'}
+                subtitle={isEn ? 'Lowest progress first' : 'ઓછી પ્રગતિ વાળા પહેલા'}
+              />
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+                <input
+                  type="search"
+                  aria-label={isEn ? 'Search student' : 'વિદ્યાર્થી શોધો'}
+                  placeholder={isEn ? "Search student..." : "વિદ્યાર્થી શોધો..."}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full sm:w-56 min-h-tap pl-9 pr-3 text-sm rounded-xl border border-line bg-surface focus:outline-none focus:border-action focus:ring-2 focus:ring-action/30"
+                />
               </div>
-            );
-          })}
-        </div>
-      </div>
+            </div>
 
-      {/* Class Students Roster */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-100">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              {isEn ? 'Class Student Roster & Topic Mastery' : 'વર્ગના વિદ્યાર્થીઓ અને પ્રગતિ'}
-            </h3>
-            <p className="text-xs text-slate-500">
-              {isEn ? 'Individual subject scores, strengths, and areas needing support' : 'દરેક વિદ્યાર્થીની વિષયવાર સિદ્ધિ અને નબળા મુદ્દાઓ'}
-            </p>
-          </div>
-
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder={isEn ? "Search student..." : "વિદ્યાર્થી શોધો..."}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48"
-            />
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                <th className="p-3">{isEn ? 'Roll No.' : 'રોલ નં.'}</th>
-                <th className="p-3">{isEn ? 'Student Name' : 'નામ'}</th>
-                <th className="p-3">{isEn ? 'Progress' : 'પ્રગતિ'}</th>
-                <th className="p-3">{isEn ? 'Accuracy' : 'ચોકસાઈ'}</th>
-                <th className="p-3">{isEn ? 'Key Strength' : 'મજબૂત મુદ્દો'}</th>
-                <th className="p-3">{isEn ? 'Needs Practice' : 'સુધારણા ક્ષેત્ર'}</th>
-                <th className="p-3 text-right">{isEn ? 'Action' : 'ક્રિયા'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredStudents.map(student => (
-                <tr key={student.id} className="hover:bg-slate-50/80 transition">
-                  <td className="p-3 font-mono font-bold text-slate-700">{student.rollNo}</td>
-                  <td className="p-3 font-bold text-slate-900">{student.name}</td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-600 rounded-full" 
-                          style={{ width: `${student.progress}%` }} 
-                        />
-                      </div>
-                      <span className="font-bold text-blue-700">{student.progress}%</span>
-                    </div>
-                  </td>
-                  <td className="p-3 font-bold text-emerald-600">{student.accuracy}</td>
-                  <td className="p-3 text-slate-600">{student.strongTopic}</td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-medium">
-                        {student.weakTopic}
-                      </span>
-                      {student.focus && (
-                        <button
-                          onClick={() => openAssignModal(student.focus)}
-                          title={isEn ? 'Assign practice for this topic' : 'આ વિષયનો મહાવરો આપો'}
-                          className="p-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
+            {/* Scrolls sideways on a phone */}
+            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+              <table className="w-full min-w-[600px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-ink-muted">
+                    <th scope="col" className="py-2 pr-3 font-semibold">{isEn ? 'Roll No.' : 'રોલ નં.'}</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">{isEn ? 'Student Name' : 'નામ'}</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">{isEn ? 'Progress' : 'પ્રગતિ'}</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">{isEn ? 'Accuracy' : 'ચોકસાઈ'}</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">{isEn ? 'Writing' : 'લેખન'}</th>
+                    <th scope="col" className="hidden 2xl:table-cell py-2 pr-3 font-semibold">{isEn ? 'Key Strength' : 'મજબૂત મુદ્દો'}</th>
+                    <th scope="col" className="py-2 pr-3 font-semibold">{isEn ? 'Needs Practice' : 'સુધારણા ક્ષેત્ર'}</th>
+                    <th scope="col" className="py-2 text-right font-semibold"><span className="sr-only">{isEn ? 'Action' : 'ક્રિયા'}</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {sortedStudents.map(student => (
+                    <tr key={student.id}>
+                      <td className="py-3 pr-3 tabular-nums text-ink-muted">{student.rollNo}</td>
+                      <th scope="row" className="py-3 pr-3 font-bold">{student.name}</th>
+                      <td className="py-3 pr-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 h-2.5 bg-line rounded-full overflow-hidden">
+                            <div className="h-full bg-action rounded-full" style={{ width: `${student.progress}%` }} />
+                          </div>
+                          <span className="font-bold tabular-nums">{student.progress}%</span>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-3 font-semibold">{student.accuracy}</td>
+                      <td className="py-3 pr-3 whitespace-nowrap">
+                        {student.id === liveStudentId && writingSummary.total > 0 ? (
+                          <span className="font-bold">
+                            {writingSummary.passRate}% <span className="font-medium text-ink-muted">· {writingSummary.passed}/{writingSummary.total}</span>
+                          </span>
+                        ) : (
+                          <span className="text-ink-muted">—</span>
+                        )}
+                      </td>
+                      {/* Also shown in the Details window, so it can hide on narrower screens */}
+                      <td className="hidden 2xl:table-cell py-3 pr-3 text-ink-muted">{student.strongTopic}</td>
+                      <td className="py-3 pr-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-1 rounded-lg bg-action-soft font-medium">{student.weakTopic}</span>
+                          {student.focus && (
+                            <IconButton
+                              onClick={() => openAssignModal(student.focus)}
+                              label={isEn ? 'Assign practice for this topic' : 'આ વિષયનો મહાવરો આપો'}
+                            >
+                              <PlusCircle className="w-5 h-5 text-action" aria-hidden="true" />
+                            </IconButton>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 text-right">
+                        <IconButton
+                          onClick={() => setSelectedStudentForDetail(student)}
+                          label={isEn ? `Details for ${student.name}` : `${student.name} ની વિગત`}
                         >
-                          <PlusCircle className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-3 text-right">
-                    <button
-                      onClick={() => setSelectedStudentForDetail(student)}
-                      className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-[11px] transition inline-flex items-center gap-1"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>{isEn ? 'Details' : 'વિગત'}</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                          <Eye className="w-5 h-5" aria-hidden="true" />
+                        </IconButton>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <div className="space-y-6">
+            {/* Teach in class: open lesson screens full-width */}
+            <Card id="t-teach" className="scroll-mt-24 space-y-3">
+              <CardTitle
+                title={isEn ? 'Teach in class' : 'વર્ગમાં ભણાવો'}
+                subtitle={isEn ? 'Open a lesson full-screen to teach with signs, visuals and examples.' : 'સંકેતો અને ચિત્રો સાથે ભણાવવા પાઠ મોટી સ્ક્રીન પર ખોલો.'}
+              />
+              <ul className="space-y-2">
+                {[
+                  { tab: 'gujarati', en: 'Gujarati letters & numbers', gu: 'ગુજરાતી અક્ષરો અને સંખ્યા' },
+                  { tab: 'math', en: 'Maths: tables & operations', gu: 'ગણિત: ઘડિયા અને ક્રિયાઓ' },
+                  { tab: 'science', en: 'Science lessons', gu: 'વિજ્ઞાનના પાઠ' }
+                ].map(l => {
+                  const st = SUBJECT_STYLES[l.tab];
+                  return (
+                    <li key={l.tab}>
+                      <button
+                        type="button"
+                        onClick={() => teachInClass(l.tab)}
+                        className="w-full flex items-center gap-3 min-h-[56px] p-2 rounded-xl border border-line hover:bg-canvas text-left transition"
+                      >
+                        <span className={`w-10 h-10 shrink-0 rounded-lg flex items-center justify-center ${st.soft} ${st.text}`}>
+                          <st.icon className="w-5 h-5" aria-hidden="true" />
+                        </span>
+                        <span className="flex-1 text-sm font-semibold">{isEn ? l.en : l.gu}</span>
+                        <ChevronRight className="w-4 h-4 text-ink-muted" aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+
+            {/* Assigned practice sets and their progress */}
+            <Card id="t-practice" className="scroll-mt-24 space-y-3">
+              <CardTitle
+                title={isEn ? 'Assigned practice' : 'આપેલ મહાવરો'}
+                subtitle={isEn
+                  ? 'Live progress of Aarav Patel (demo student). Assign a set again to repeat the practice.'
+                  : 'આરવ પટેલ (ડેમો વિદ્યાર્થી)ની પ્રગતિ. મહાવરો ફરી કરાવવા ફરીથી ફાળવો.'}
+              />
+              {assignments.length === 0 && (
+                <p className="text-sm text-ink-muted">{isEn ? 'No practice assigned yet.' : 'હજુ કોઈ મહાવરો આપ્યો નથી.'}</p>
+              )}
+              <ul className="space-y-2">
+                {assignments.map(asg => {
+                  const finished = asg.status === 'પૂર્ણ';
+                  return (
+                    <li key={asg.id} className="p-3 rounded-xl bg-canvas border border-line space-y-2">
+                      <div>
+                        <p className="text-sm font-bold">{asg.title}</p>
+                        <p className="text-sm text-ink-muted">
+                          {isEn ? SUBJECTS[asg.subjectKey]?.en : asg.subject} · {isEn ? 'Due' : 'મુદત'} {asg.dueDate}
+                        </p>
+                      </div>
+                      <ProgressBar
+                        value={(100 * asg.done) / asg.count}
+                        color={finished ? 'bg-success' : 'bg-action'}
+                        label={finished ? (isEn ? 'Finished' : 'પૂર્ણ') : null}
+                        valueText={`${asg.done}/${asg.count} · ${isEn ? `${asg.correct} correct` : `${asg.correct} સાચા`}`}
+                      />
+                      <Button variant="secondary" onClick={() => assignAgain(asg)} className="w-full">
+                        <RotateCcw className="w-4 h-4" aria-hidden="true" />
+                        {isEn ? 'Assign again' : 'ફરી ફાળવો'}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          </div>
+        </div>
+
+        {/* Handwriting check: pass mark setting + live attempt history */}
+        <div id="t-writing" className="scroll-mt-24 space-y-6">
+          <Card className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+              <CardTitle
+                title={isEn ? 'Handwriting check strictness' : 'લેખન ચકાસણીની કડકાઈ'}
+                subtitle={isEn
+                  ? 'Pass mark for the writing pad. A stroke match score at or above this passes and earns stars. Raise it for stricter checking, lower it for younger learners.'
+                  : 'લેખન પેડ માટે પાસ ગુણ. આટલા કે વધુ ગુણ આવે તો પાસ અને તારા મળે. કડક ચકાસણી માટે વધારો, નાના બાળકો માટે ઘટાડો.'}
+              />
+              <div className="sm:text-right shrink-0">
+                <div className="font-heading text-4xl font-bold text-action tabular-nums leading-none">{writingThreshold}</div>
+                <div className="text-sm text-ink-muted">{isEn ? 'pass mark' : 'પાસ ગુણ'}</div>
+              </div>
+            </div>
+            <input
+              type="range"
+              min={60}
+              max={100}
+              step={5}
+              value={writingThreshold}
+              onChange={(e) => setWritingThreshold(Number(e.target.value))}
+              className="w-full h-11 accent-[#C2410C] cursor-pointer"
+              aria-label={isEn ? 'Handwriting pass mark' : 'લેખન પાસ ગુણ'}
+            />
+            <div className="flex items-center justify-between gap-2 text-sm text-ink-muted -mt-1">
+              <span>{isEn ? '60 · More lenient' : '૬૦ · સરળ'}</span>
+              {writingThreshold !== DEFAULT_WRITING_THRESHOLD && (
+                <Button variant="ghost" onClick={() => setWritingThreshold(DEFAULT_WRITING_THRESHOLD)}>
+                  {isEn ? `Reset to ${DEFAULT_WRITING_THRESHOLD}` : `${DEFAULT_WRITING_THRESHOLD} પર પાછું`}
+                </Button>
+              )}
+              <span>{isEn ? 'Stricter · 100' : 'કડક · ૧૦૦'}</span>
+            </div>
+          </Card>
+
+          <WritingAttemptsPanel
+            subtitle={isEn
+              ? 'Live writing-pad attempts of Aarav Patel (demo student): score, problem found, attempt number and time.'
+              : 'આરવ પટેલ (ડેમો વિદ્યાર્થી)ના લેખન પ્રયત્નો: ગુણ, ભૂલ, પ્રયત્ન ક્રમ અને સમય.'}
+          />
+        </div>
+
+        <div id="t-videos" className="scroll-mt-24">
+          <LessonVideoProgress
+            subtitle={isEn
+              ? 'Aarav Patel (demo student): lessons whose sign, how-to-write and how-to-say videos have all been watched.'
+              : 'આરવ પટેલ (ડેમો વિદ્યાર્થી): જે પાઠના સાઇન, લખવાના અને બોલવાના બધા વિડીયો જોવાયા છે.'}
+          />
         </div>
       </div>
 
       {/* Create Assignment Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="font-bold text-base text-slate-900">
-                {isEn ? 'Assign Practice Exercise' : 'નવું સ્વાધ્યાય આપો'}
-              </h3>
-              <button 
-                onClick={() => setShowCreateModal(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <div className="fixed inset-0 z-50 bg-ink/70 flex items-end sm:items-center justify-center sm:p-4 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="assign-title">
+          <div className="bg-surface w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl border border-line p-5 space-y-4 max-h-[94vh] overflow-y-auto">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="assign-title" className="text-xl font-bold">
+                {isEn ? 'Assign practice' : 'નવું સ્વાધ્યાય આપો'}
+              </h2>
+              <IconButton onClick={() => setShowCreateModal(false)} label={isEn ? 'Close' : 'બંધ કરો'}>
+                <X className="w-5 h-5" aria-hidden="true" />
+              </IconButton>
             </div>
 
-            <form onSubmit={handleCreateAssignment} className="space-y-3">
+            <form onSubmit={handleCreateAssignment} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  {isEn ? 'Subject:' : 'વિષય:'}
+                <label htmlFor="asg-subject" className="text-sm font-semibold block mb-1">
+                  {isEn ? 'Subject' : 'વિષય'}
                 </label>
                 <select
+                  id="asg-subject"
                   value={subjectKey}
                   onChange={(e) => {
                     setSubjectKey(e.target.value);
                     setTopicId(SUBJECTS[e.target.value].topics[0].id);
                   }}
-                  className="w-full p-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  className={inputClass}
                 >
                   {Object.entries(SUBJECTS).map(([key, sub]) => (
                     <option key={key} value={key}>{isEn ? sub.en : sub.label}</option>
@@ -373,79 +428,63 @@ export const TeacherDashboard = () => {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  {isEn ? 'Topic:' : 'મુદ્દો:'}
+                <label htmlFor="asg-topic" className="text-sm font-semibold block mb-1">
+                  {isEn ? 'Topic' : 'મુદ્દો'}
                 </label>
-                <select
-                  value={topicId}
-                  onChange={(e) => setTopicId(e.target.value)}
-                  className="w-full p-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                >
+                <select id="asg-topic" value={topicId} onChange={(e) => setTopicId(e.target.value)} className={inputClass}>
                   {SUBJECTS[subjectKey].topics.map(t => (
                     <option key={t.id} value={t.id}>{t.title}</option>
                   ))}
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  {isEn ? 'Number of exercises:' : 'કુલ પ્રશ્નો:'}
-                </label>
+              <fieldset>
+                <legend className="text-sm font-semibold mb-1">{isEn ? 'Number of exercises' : 'કુલ પ્રશ્નો'}</legend>
                 <div className="flex gap-2">
                   {COUNTS.map(n => (
                     <button
                       key={n}
                       type="button"
+                      aria-pressed={questionCount === n}
                       onClick={() => setQuestionCount(n)}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
-                        questionCount === n ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      className={`flex-1 min-h-tap rounded-xl text-base border transition ${
+                        questionCount === n ? 'bg-ink border-ink text-white font-bold' : 'bg-surface border-line font-medium hover:bg-canvas'
                       }`}
                     >
                       {n}
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  {isEn ? 'Note for students (optional):' : 'વિદ્યાર્થીઓ માટે નોંધ (વૈકલ્પિક):'}
+                <label htmlFor="asg-note" className="text-sm font-semibold block mb-1">
+                  {isEn ? 'Note for students (optional)' : 'વિદ્યાર્થીઓ માટે નોંધ (વૈકલ્પિક)'}
                 </label>
                 <input
+                  id="asg-note"
                   type="text"
                   placeholder={isEn ? 'Leave empty to use the topic name' : 'ખાલી રાખો તો મુદ્દાનું નામ વપરાશે'}
                   value={assignmentTitle}
                   onChange={(e) => setAssignmentTitle(e.target.value)}
-                  className="w-full p-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  {isEn ? 'Due Date:' : 'પૂર્ણ કરવાની મુદત:'}
+                <label htmlFor="asg-due" className="text-sm font-semibold block mb-1">
+                  {isEn ? 'Due date' : 'પૂર્ણ કરવાની મુદત'}
                 </label>
-                <input
-                  type="text"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full p-2.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <input id="asg-due" type="text" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputClass} />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
-                >
+              <div className="flex gap-2 pt-1">
+                <Button variant="secondary" onClick={() => setShowCreateModal(false)} className="min-h-[52px]">
                   {isEn ? 'Cancel' : 'રદ કરો'}
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md transition"
-                >
-                  {isEn ? 'Assign to Class' : 'સ્વાધ્યાય ફાળવો'}
-                </button>
+                </Button>
+                <Button type="submit" className="flex-1 min-h-[52px] text-base">
+                  {isEn ? 'Assign to class' : 'સ્વાધ્યાય ફાળવો'}
+                </Button>
               </div>
             </form>
           </div>
@@ -454,48 +493,35 @@ export const TeacherDashboard = () => {
 
       {/* Student Detail Modal */}
       {selectedStudentForDetail && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 bg-ink/70 flex items-end sm:items-center justify-center sm:p-4 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="student-detail-title">
+          <div className="bg-surface w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl border border-line p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-base text-slate-900">{selectedStudentForDetail.name}</h3>
-                <p className="text-xs text-slate-500">{isEn ? 'Roll Number:' : 'રોલ નંબર:'} {selectedStudentForDetail.rollNo}</p>
+                <h2 id="student-detail-title" className="text-xl font-bold">{selectedStudentForDetail.name}</h2>
+                <p className="text-sm text-ink-muted">{isEn ? 'Roll Number:' : 'રોલ નંબર:'} {selectedStudentForDetail.rollNo}</p>
               </div>
-              <button 
-                onClick={() => setSelectedStudentForDetail(null)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <IconButton onClick={() => setSelectedStudentForDetail(null)} label={isEn ? 'Close' : 'બંધ કરો'}>
+                <X className="w-5 h-5" aria-hidden="true" />
+              </IconButton>
             </div>
 
-            <div className="space-y-2.5 text-xs">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between">
-                <span className="text-slate-500 font-medium">{isEn ? 'Attendance Rate:' : 'હાજરી દર:'}</span>
-                <span className="font-bold text-slate-800">{selectedStudentForDetail.attendance}</span>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between">
-                <span className="text-slate-500 font-medium">{isEn ? 'Accuracy Rate:' : 'ચોકસાઈ દર:'}</span>
-                <span className="font-bold text-emerald-600">{selectedStudentForDetail.accuracy}</span>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between">
-                <span className="text-slate-500 font-medium">{isEn ? 'Strongest Topic:' : 'સૌથી મજબૂત મુદ્દો:'}</span>
-                <span className="font-bold text-blue-700">{selectedStudentForDetail.strongTopic}</span>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between">
-                <span className="text-slate-500 font-medium">{isEn ? 'Needs Focus:' : 'ધ્યાન આપવા જેવો મુદ્દો:'}</span>
-                <span className="font-bold text-amber-700">{selectedStudentForDetail.weakTopic}</span>
-              </div>
-            </div>
+            <dl className="divide-y divide-line rounded-xl border border-line">
+              {[
+                [isEn ? 'Attendance Rate' : 'હાજરી દર', selectedStudentForDetail.attendance],
+                [isEn ? 'Accuracy Rate' : 'ચોકસાઈ દર', selectedStudentForDetail.accuracy],
+                [isEn ? 'Strongest Topic' : 'સૌથી મજબૂત મુદ્દો', selectedStudentForDetail.strongTopic],
+                [isEn ? 'Needs Focus' : 'ધ્યાન આપવા જેવો મુદ્દો', selectedStudentForDetail.weakTopic]
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-3 p-3 text-sm">
+                  <dt className="text-ink-muted">{k}</dt>
+                  <dd className="font-bold text-right">{v}</dd>
+                </div>
+              ))}
+            </dl>
 
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => setSelectedStudentForDetail(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold"
-              >
-                {isEn ? 'Close' : 'બંધ કરો'}
-              </button>
-            </div>
+            <Button onClick={() => setSelectedStudentForDetail(null)} className="w-full min-h-[52px] text-base">
+              {isEn ? 'Close' : 'બંધ કરો'}
+            </Button>
           </div>
         </div>
       )}
