@@ -1,15 +1,14 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { getStrokeReference } from '../../data/strokeReferences';
+import { verifyStrokes, layoutReference, fitReferenceTo } from '../../utils/strokeMatcher';
+import { drawTextGuide, pixelScore } from '../../utils/glyphRaster';
+import { WRITING_ERRORS } from '../../utils/writingFeedback';
+import { toGuDigits, prepareCanvas, strokePath, arrowHead, animatePaths } from '../../utils/strokeCanvas';
 import {
   RotateCcw,
-  Check,
-  Sparkles,
-  Eye,
-  EyeOff,
+  Undo2,
   Volume2,
-  PenTool,
-  Eraser,
-  Award,
   Video,
   ChevronLeft,
   ChevronRight,
@@ -17,84 +16,27 @@ import {
   Pause,
   Layers,
   BookOpen,
-  Pencil
+  Pencil,
+  Star,
+  Loader2,
+  ArrowRight,
+  PenLine,
+  Smile,
+  ChevronDown,
+  X
 } from 'lucide-react';
 
-const CELL = 8; // grid cell size in CSS px used for scoring
-
-// Marks a grid cell "on" if any pixel inside it is drawn (alpha > 0).
-const toGrid = (img, scale, cols, rows) => {
-  const grid = new Uint8Array(cols * rows);
-  const step = CELL * scale;
-  for (let y = 0; y < img.height; y += 2) {
-    for (let x = 0; x < img.width; x += 2) {
-      if (img.data[(y * img.width + x) * 4 + 3] > 0) {
-        grid[Math.floor(y / step) * cols + Math.floor(x / step)] = 1;
-      }
-    }
-  }
-  return grid;
+const INK_WIDTH = 7;
+const PEN_COLORS = ['#1E1B4B', '#2563EB', '#15803D'];
+const PEN_NAMES = { '#1E1B4B': ['Dark blue', 'ઘેરો વાદળી'], '#2563EB': ['Blue', 'વાદળી'], '#15803D': ['Green', 'લીલો'] };
+const C = {
+  guide: 'rgba(30, 27, 75, 0.13)',
+  guideMark: '#C2410C',
+  wrong: '#BE185D',
+  correct: '#15803D'
 };
-
-// Score 0-100: geometric mean of precision (ink that lies on the letter)
-// and coverage (letter that got inked), with a 2-cell tolerance for both.
-export const scoreGrids = (ink, target, cols, rows, tol = 2) => {
-  const near = (grid, i) => {
-    const cx = i % cols, cy = Math.floor(i / cols);
-    for (let dy = -tol; dy <= tol; dy++) {
-      for (let dx = -tol; dx <= tol; dx++) {
-        const x = cx + dx, y = cy + dy;
-        if (x >= 0 && y >= 0 && x < cols && y < rows && grid[y * cols + x]) return true;
-      }
-    }
-    return false;
-  };
-  let inkCount = 0, inkOnLetter = 0, targetCount = 0, targetCovered = 0;
-  for (let i = 0; i < ink.length; i++) {
-    if (ink[i]) { inkCount++; if (near(target, i)) inkOnLetter++; }
-    if (target[i]) { targetCount++; if (near(ink, i)) targetCovered++; }
-  }
-  if (!inkCount || !targetCount) return 0;
-  return Math.round(100 * Math.sqrt((inkOnLetter / inkCount) * (targetCovered / targetCount)));
-};
-
-// Computes appropriate font size based on text length and canvas dimensions
-export const getGuideFontSize = (rectWidth, rectHeight, text) => {
-  if (!text) return 120;
-  const len = text.length;
-  let baseSize;
-  if (len <= 1) {
-    baseSize = Math.min(rectHeight * 0.68, 175);
-  } else if (len === 2) {
-    baseSize = Math.min(rectHeight * 0.60, 135);
-  } else if (len <= 4) {
-    baseSize = Math.min(rectHeight * 0.45, 90);
-  } else if (len <= 7) {
-    baseSize = Math.min(rectHeight * 0.38, 65);
-  } else {
-    // Longer words like પ્રકાશસંશ્લેષણ or સૂર્યમંડળ
-    baseSize = Math.min(rectHeight * 0.28, 48);
-  }
-  return Math.max(22, Math.round(baseSize));
-};
-
-// Dynamically adjusts font size so text never clips off canvas boundaries
-export const computeGuideFont = (ctx, rectWidth, rectHeight, scale, text) => {
-  let fontSize = getGuideFontSize(rectWidth, rectHeight, text);
-  const maxWidth = (rectWidth - 40) * scale;
-  const fontFam = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Gujarati", "Gujarati Sangam MN", sans-serif';
-
-  ctx.font = `bold ${fontSize * scale}px ${fontFam}`;
-  let textWidth = ctx.measureText(text).width;
-
-  if (textWidth > maxWidth && textWidth > 0) {
-    fontSize = Math.floor(fontSize * (maxWidth / textWidth));
-    fontSize = Math.max(20, fontSize);
-    ctx.font = `bold ${fontSize * scale}px ${fontFam}`;
-  }
-
-  return { fontSize, font: `bold ${fontSize * scale}px ${fontFam}` };
-};
+// Minimum time the "Checking…" state stays visible, so it registers.
+const CHECKING_MS = 550;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WritingPad Component
@@ -105,586 +47,639 @@ export const WritingPad = ({
   letterMeaning = '',
   onSignClick = null,
   subject = 'gujarati',
-  // Phase 2 navigation props (optional — omit in ScienceModule to disable nav UI)
+  // Navigation props (optional — omit to hide the prev/next bar)
   currentIndex = null,
   totalItems = null,
   onPrevious = null,
   onNext = null,
   hasPrevious = false,
   hasNext = false,
-  traceGuide = ''
+  traceGuide = '',
+  // Optional: opens a lesson clip ('write' | 'say') so it can be replayed after a mistake
+  onOpenClip = null
 }) => {
-  const { speakText, recordExerciseAttempt, showToast, uiLanguage } = useApp();
+  const { speakText, recordWritingAttempt, writingThreshold, showToast, uiLanguage } = useApp();
   const isEn = uiLanguage === 'en';
 
-  const canvasRef = useRef(null);
+  const boxRef = useRef(null);
   const guideCanvasRef = useRef(null);
+  const inkCanvasRef = useRef(null);
+  const overlayCanvasRef = useRef(null);
+  const activeStrokeRef = useRef(null);
+  const checkTimerRef = useRef(null);
 
-  // ── Drawing state ──────────────────────────────────────────────────────────
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [strokeCount, setStrokeCount] = useState(0);
-  const [penColor, setPenColor] = useState('#1e293b');
-  const [penWidth, setPenWidth] = useState(6);
-  const [isEraser, setIsEraser] = useState(false);
-  const [scoreResult, setScoreResult] = useState(null);
-  const [history, setHistory] = useState([]);
-
-  // ── Phase 2 state ──────────────────────────────────────────────────────────
-  // 'guided'   → shows the watermark tracing reference
-  // 'freehand' → hides the reference (memory / independent writing practice)
-  const [practiceMode, setPracticeMode] = useState('guided');
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [strokes, setStrokes] = useState([]); // [{ points: [{x, y, t}], color }]
+  const [penColor, setPenColor] = useState(PEN_COLORS[0]);
+  const [practiceMode, setPracticeMode] = useState('guided'); // 'guided' | 'freehand'
   const [showRuling, setShowRuling] = useState(true);
   const [showStrokePanel, setShowStrokePanel] = useState(false);
-  // Placeholder demo state — no real stroke paths yet, so buttons are disabled
   const [demoPlaying, setDemoPlaying] = useState(false);
+  const [phase, setPhase] = useState('idle'); // 'idle' | 'checking' | 'pass' | 'fail'
+  const [result, setResult] = useState(null);
+  const [replayKey, setReplayKey] = useState(0);
 
+  const reference = useMemo(() => getStrokeReference(targetLetter), [targetLetter]);
+  const hasStrokeData = reference !== null;
   const showGuide = practiceMode === 'guided';
+  const locked = phase !== 'idle';
 
-  // ── Guide watermark rendering ──────────────────────────────────────────────
-  const drawGuide = (targetCanvas, letter, isEvaluation = false) => {
-    if (!targetCanvas) return;
-    const ctx = targetCanvas.getContext('2d');
-    const rect = targetCanvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
+  const layout = useMemo(
+    () => (reference && size.w ? layoutReference(reference, size.w, size.h) : null),
+    [reference, size.w, size.h]
+  );
+  const guideWidth = Math.max(16, Math.min(size.w, size.h) * 0.075);
+  // Layout follows the pad's own width (not the window), so it is right
+  // inside the phone simulator as well as on real phones and tablets.
+  const wide = size.w >= 520;
 
-    const scale = 2; // Retina scale
-    targetCanvas.width = rect.width * scale;
-    targetCanvas.height = rect.height * scale;
-
-    ctx.save();
-    ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
-
-    const { font } = computeGuideFont(ctx, rect.width, rect.height, scale, letter);
-    ctx.font = font;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = isEvaluation ? '#000000' : 'rgba(71, 85, 105, 0.22)';
-    ctx.fillText(letter, targetCanvas.width / 2, targetCanvas.height / 2);
-    ctx.restore();
-  };
-
-  // ── Initialise / reset canvas when targetLetter changes ───────────────────
+  // ── Track canvas box size ──────────────────────────────────────────────
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0) return;
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setSize(prev => (prev.w === Math.round(r.width) && prev.h === Math.round(r.height)
+        ? prev : { w: Math.round(r.width), h: Math.round(r.height) }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-    const scale = 2;
-    canvas.width = rect.width * scale;
-    canvas.height = rect.height * scale;
-
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-
-    if (guideCanvasRef.current) {
-      drawGuide(guideCanvasRef.current, targetLetter, false);
-    }
-
-    clearCanvas(false);
-    setScoreResult(null);
+  // ── Reset when the target changes ──────────────────────────────────────
+  const resetAttempt = () => {
+    clearTimeout(checkTimerRef.current);
+    activeStrokeRef.current = null;
+    setStrokes([]);
+    setResult(null);
+    setPhase('idle');
+  };
+  useEffect(() => {
+    resetAttempt();
     setShowStrokePanel(false);
     setDemoPlaying(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetLetter]);
+  useEffect(() => () => clearTimeout(checkTimerRef.current), []);
 
+  // ── Guide layer ────────────────────────────────────────────────────────
   useEffect(() => {
-    const handleResize = () => {
-      if (guideCanvasRef.current) {
-        drawGuide(guideCanvasRef.current, targetLetter, false);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetLetter]);
-
-  // ── Canvas helpers ─────────────────────────────────────────────────────────
-  const clearCanvas = (resetScore = true) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
-    setStrokeCount(0);
-    setHistory([]);
-    if (resetScore) setScoreResult(null);
-  };
-
-  const getCoordinates = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    if (e.touches && e.touches.length > 0) {
-      return {
-        x: e.touches[0].clientX - rect.left,
-        y: e.touches[0].clientY - rect.top
-      };
-    }
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    };
-  };
-
-  const startDrawing = (e) => {
-    e.preventDefault();
-    const { x, y } = getCoordinates(e);
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-
-    setHistory(prev => [...prev, ctx.getImageData(0, 0, canvas.width, canvas.height)]);
-
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = penWidth;
-    ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = penColor;
-
-    setIsDrawing(true);
-    setStrokeCount(prev => prev + 1);
-  };
-
-  const draw = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const { x, y } = getCoordinates(e);
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-
-  const stopDrawing = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    ctx.closePath();
-    setIsDrawing(false);
-  };
-
-  const handleUndo = () => {
-    if (history.length === 0) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const lastState = history[history.length - 1];
-    ctx.putImageData(lastState, 0, 0);
-    setHistory(prev => prev.slice(0, -1));
-  };
-
-  // ── Evaluation ─────────────────────────────────────────────────────────────
-  const evaluateWriting = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    if (strokeCount === 0) {
-      showToast(isEn ? 'Please try drawing the character on the canvas first!' : 'કૃપા કરીને પેડ પર અક્ષર લખવાનો પ્રયત્ન કરો!', 'info');
+    const canvas = guideCanvasRef.current;
+    if (!canvas || !size.w) return;
+    const ctx = prepareCanvas(canvas, size.w, size.h);
+    if (!layout) {
+      drawTextGuide(ctx, size.w, size.h, targetLetter, 'rgba(71, 85, 105, 0.22)');
       return;
     }
+    ctx.strokeStyle = C.guide;
+    ctx.lineWidth = guideWidth;
+    layout.paths.forEach(p => strokePath(ctx, p));
+    // Numbered start dots and end arrows teach stroke order and direction
+    layout.paths.forEach((p, i) => {
+      arrowHead(ctx, p, 'rgba(194, 65, 12, 0.55)', 11);
+      ctx.fillStyle = C.guideMark;
+      ctx.beginPath();
+      ctx.arc(p[0].x, p[0].y, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '700 13px "Mukta Vaani", "Noto Sans Gujarati", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(toGuDigits(i + 1), p[0].x, p[0].y + 1);
+    });
+  }, [layout, size.w, size.h, targetLetter, guideWidth]);
 
-    const scale = canvas.width / canvas.getBoundingClientRect().width;
-    const cols = Math.ceil(canvas.width / (CELL * scale));
-    const rows = Math.ceil(canvas.height / (CELL * scale));
+  // ── Ink layer: always redrawn from the recorded strokes ────────────────
+  useEffect(() => {
+    const canvas = inkCanvasRef.current;
+    if (!canvas || !size.w) return;
+    const ctx = prepareCanvas(canvas, size.w, size.h);
+    ctx.lineWidth = INK_WIDTH;
+    strokes.forEach(s => { ctx.strokeStyle = s.color; strokePath(ctx, s.points); });
+  }, [strokes, size.w, size.h]);
 
-    const inkImageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-    const ink = toGrid(inkImageData, scale, cols, rows);
+  // Reference paths placed where the feedback should be drawn
+  const feedbackPaths = useMemo(() => {
+    if (!reference || !result) return null;
+    if (practiceMode === 'guided' && layout) return layout.paths;
+    return strokes.length ? fitReferenceTo(reference, strokes.map(s => s.points)) : layout?.paths;
+  }, [reference, result, practiceMode, layout, strokes]);
 
-    // Ink detection: count number of drawn ink grid cells
-    let inkCellCount = 0;
-    for (let i = 0; i < ink.length; i++) {
-      if (ink[i]) inkCellCount++;
-    }
+  // ── Feedback overlay: wrong stroke + animated correct stroke ───────────
+  useEffect(() => {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas || !size.w) return;
+    const ctx = prepareCanvas(canvas, size.w, size.h);
+    if (phase !== 'fail' || !result || !feedbackPaths) return;
 
-    // Require actual ink drawn (at least 6 cells of coverage)
-    if (inkCellCount < 6) {
-      showToast(isEn ? 'Please write or trace the character on the canvas first!' : 'કૃપા કરીને પેડ પર અક્ષર લખવાનો પ્રયત્ન કરો!', 'info');
-      return;
-    }
+    const wrong = result.wrongStroke !== null ? strokes[result.wrongStroke] : null;
+    const drawWrong = () => {
+      if (!wrong) return;
+      // White halo + dashed magenta: readable on any pen colour, and the
+      // dash pattern distinguishes it without relying on colour alone.
+      ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = INK_WIDTH + 8;
+      strokePath(ctx, wrong.points);
+      ctx.setLineDash([10, 8]);
+      ctx.strokeStyle = C.wrong;
+      ctx.lineWidth = INK_WIDTH + 3;
+      strokePath(ctx, wrong.points);
+      ctx.setLineDash([]);
+    };
+    if (result.refStroke === null || !feedbackPaths[result.refStroke]) { drawWrong(); return; }
+    return animatePaths(ctx, size.w, size.h, [feedbackPaths[result.refStroke]], {
+      color: C.correct, width: INK_WIDTH, drawBase: drawWrong, loops: 3
+    });
+  }, [phase, result, feedbackPaths, strokes, size.w, size.h, replayKey]);
 
-    // Draw the reference letter off-screen, pixel-identical to the on-screen guide
-    const ref = document.createElement('canvas');
-    ref.width = canvas.width;
-    ref.height = canvas.height;
-    const rctx = ref.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
+  // ── Stroke-order demo (uses the same reference data) ───────────────────
+  useEffect(() => {
+    if (!demoPlaying || !layout || locked) return;
+    const canvas = overlayCanvasRef.current;
+    const ctx = prepareCanvas(canvas, size.w, size.h);
+    const cancel = animatePaths(ctx, size.w, size.h, layout.paths, {
+      color: C.guideMark, width: INK_WIDTH, loops: 1, onDone: () => setDemoPlaying(false)
+    });
+    return () => { cancel(); ctx.clearRect(0, 0, size.w, size.h); };
+  }, [demoPlaying, layout, locked, size.w, size.h]);
 
-    const { font } = computeGuideFont(rctx, rect.width, rect.height, scale, targetLetter);
-    rctx.font = font;
-    rctx.textAlign = 'center';
-    rctx.textBaseline = 'middle';
-    rctx.fillStyle = '#000000';
-    rctx.fillText(targetLetter, ref.width / 2, ref.height / 2);
-
-    const target = toGrid(rctx.getImageData(0, 0, ref.width, ref.height), scale, cols, rows);
-    const score = scoreGrids(ink, target, cols, rows);
-    const stars = score >= 85 ? 3 : score >= 70 ? 2 : score >= 60 ? 1 : 0;
-
-    const message = stars === 3
-      ? (isEn ? 'Excellent! Clear and accurate letter.' : 'અદ્ભુત! સુંદર અને સ્પષ્ટ અક્ષર લેખન!')
-      : stars > 0
-        ? (isEn ? 'Good try! Follow the guide shape more closely.' : 'સરસ પ્રયાસ! માર્ગદર્શક આકારને વધુ નજીકથી અનુસરો.')
-        : (isEn ? 'Not quite. Trace over the grey letter and try again.' : 'હજુ નહીં. ઝાંખા અક્ષર પર ઘૂંટીને ફરી પ્રયત્ન કરો.');
-
-    setScoreResult({ score, message, stars });
-
-    recordExerciseAttempt(subject, stars > 0, `Letter '${targetLetter}' Practice`, stars * 5, 'writing');
-    if (stars > 0) speakText(targetLetter);
+  // ── Pointer input → strokes with timestamps ────────────────────────────
+  const pointFrom = (e) => {
+    const r = inkCanvasRef.current.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top, t: Math.round(e.timeStamp) };
   };
 
-  // ── Navigation handlers ────────────────────────────────────────────────────
-  const handlePrevious = () => {
-    if (hasPrevious && onPrevious) {
-      clearCanvas(true);
-      onPrevious();
-    }
-  };
-
-  const handleNext = () => {
-    if (hasNext && onNext) {
-      clearCanvas(true);
-      onNext();
-    }
-  };
-
-  // ── Stroke-order demo (placeholder) ───────────────────────────────────────
-  // No vector stroke-path data exists in the project data files.
-  // Set hasStrokeData = true and populate strokePaths[] when coordinate data
-  // is curated so the Play/Pause/Replay controls become functional.
-  const hasStrokeData = false;
-
-  const handleDemoToggle = () => {
-    if (!hasStrokeData) return;
-    setDemoPlaying(prev => !prev);
-  };
-
-  const handleDemoReplay = () => {
-    if (!hasStrokeData) return;
+  const handlePointerDown = (e) => {
+    if (locked || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     setDemoPlaying(false);
-    setTimeout(() => setDemoPlaying(true), 100);
+    const p = pointFrom(e);
+    activeStrokeRef.current = { id: e.pointerId, points: [p], color: penColor };
+    const ctx = inkCanvasRef.current.getContext('2d');
+    ctx.strokeStyle = penColor;
+    ctx.lineWidth = INK_WIDTH;
+    strokePath(ctx, [p]);
   };
 
-  // ── Notebook ruling ────────────────────────────────────────────────────────
-  // Pure CSS gradient on a div beneath the canvases — never sampled by
-  // canvas.getImageData() so it cannot affect drawing or scoring.
+  const handlePointerMove = (e) => {
+    const s = activeStrokeRef.current;
+    if (!s || s.id !== e.pointerId) return;
+    e.preventDefault();
+    const p = pointFrom(e);
+    const last = s.points[s.points.length - 1];
+    if (Math.hypot(p.x - last.x, p.y - last.y) < 1.5) return;
+    s.points.push(p);
+    const ctx = inkCanvasRef.current.getContext('2d');
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = INK_WIDTH;
+    strokePath(ctx, [last, p]);
+  };
+
+  const handlePointerUp = (e) => {
+    const s = activeStrokeRef.current;
+    if (!s || s.id !== e.pointerId) return;
+    activeStrokeRef.current = null;
+    setStrokes(prev => [...prev, { points: s.points, color: s.color }]);
+  };
+
+  const handleUndo = () => setStrokes(prev => prev.slice(0, -1));
+
+  // ── Verification ───────────────────────────────────────────────────────
+  const evaluateWriting = () => {
+    if (locked) return;
+    if (strokes.length === 0) {
+      showToast(isEn ? 'Write the character on the pad first.' : 'પહેલા પેડ પર અક્ષર લખો.', 'info');
+      return;
+    }
+    setDemoPlaying(false);
+    setPhase('checking');
+    const started = performance.now();
+
+    // Let the "Checking…" state paint before the (fast) comparison runs.
+    checkTimerRef.current = setTimeout(() => {
+      let res;
+      if (reference && layout) {
+        res = verifyStrokes(strokes.map(s => s.points), reference, {
+          mode: practiceMode,
+          threshold: writingThreshold,
+          guide: practiceMode === 'guided' ? { strokes: layout.paths, radius: guideWidth / 2 + 10 } : null
+        });
+      } else {
+        // No stroke data for this target yet: shape check only.
+        const canvas = inkCanvasRef.current;
+        const score = pixelScore(canvas, size.w, size.h, canvas.width / size.w, targetLetter);
+        const passed = score >= writingThreshold;
+        res = { passed, score, error: passed ? null : 'shape', wrongStroke: null, refStroke: null };
+      }
+      const award = recordWritingAttempt({
+        subject, character: targetLetter, score: res.score, error: res.error, passed: res.passed, mode: practiceMode
+      });
+      const show = () => {
+        setResult({ ...res, ...award });
+        setPhase(res.passed ? 'pass' : 'fail');
+        if (res.passed) speakText(targetLetter); // optional audio aid, never the only signal
+      };
+      const wait = CHECKING_MS - (performance.now() - started);
+      checkTimerRef.current = setTimeout(show, Math.max(0, wait));
+    }, 30);
+  };
+
+  // ── Navigation ─────────────────────────────────────────────────────────
+  const handlePrevious = () => { if (hasPrevious && onPrevious) onPrevious(); };
+  const handleNext = () => { if (hasNext && onNext) onNext(); };
+
+  // Notebook ruling — CSS only, never sampled by any canvas
   const rulingStyle = showRuling ? {
     backgroundImage: [
-      'linear-gradient(90deg, transparent calc(15% - 1px), rgba(239,68,68,0.20) calc(15% - 1px), rgba(239,68,68,0.20) 15%, transparent 15%)',
-      'repeating-linear-gradient(180deg, transparent, transparent 31px, rgba(99,179,237,0.30) 31px, rgba(99,179,237,0.30) 32px)'
+      'linear-gradient(90deg, transparent calc(12% - 1px), rgba(194,65,12,0.22) calc(12% - 1px), rgba(194,65,12,0.22) 12%, transparent 12%)',
+      'repeating-linear-gradient(180deg, transparent, transparent 35px, rgba(30,27,75,0.10) 35px, rgba(30,27,75,0.10) 36px)'
     ].join(', ')
   } : {};
 
-  // ── Derived flags ──────────────────────────────────────────────────────────
   const hasNavigation = currentIndex !== null && totalItems !== null;
-  const displayIndex = currentIndex !== null ? currentIndex + 1 : null;
+  const err = result?.error ? WRITING_ERRORS[result.error] : null;
+  const strokeNo = result && (result.refStroke ?? result.wrongStroke);
+  const padBorder = phase === 'pass' ? 'border-pad-pass border-solid'
+    : phase === 'fail' ? 'border-pad-wrong border-solid' : 'border-ink-muted/50 border-dashed';
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-md p-4 flex flex-col gap-3">
+    <div className="bg-surface text-ink font-mukta rounded-2xl border border-line p-3 sm:p-4 flex flex-col gap-3">
 
-      {/* ── Prev / Next Navigation Bar ───────────────────────────────────── */}
+      {/* ── Prev / Next ────────────────────────────────────────────────── */}
       {hasNavigation && (
-        <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 border border-slate-200">
+        <div className="flex items-center justify-between bg-canvas rounded-xl px-1.5 py-1 border border-line">
           <button
             onClick={handlePrevious}
             disabled={!hasPrevious}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-30 disabled:cursor-not-allowed bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95 shadow-sm"
+            className="flex items-center gap-1 min-h-tap px-3 rounded-lg text-sm font-bold transition disabled:opacity-40 disabled:cursor-not-allowed text-ink hover:bg-surface active:scale-95"
           >
-            <ChevronLeft className="w-3.5 h-3.5" />
+            <ChevronLeft className="w-4 h-4" />
             <span>{isEn ? 'Prev' : 'પહેલા'}</span>
           </button>
-
-          <span className="text-xs font-bold text-slate-600 tabular-nums select-none">
-            {displayIndex} / {totalItems}
-          </span>
-
+          <span className="text-sm font-bold tabular-nums select-none">{currentIndex + 1} / {totalItems}</span>
           <button
             onClick={handleNext}
             disabled={!hasNext}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-30 disabled:cursor-not-allowed bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95 shadow-sm"
+            className="flex items-center gap-1 min-h-tap px-3 rounded-lg text-sm font-bold transition disabled:opacity-40 disabled:cursor-not-allowed text-ink hover:bg-surface active:scale-95"
           >
             <span>{isEn ? 'Next' : 'આગળ'}</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* ── Target Letter Header ─────────────────────────────────────────── */}
-      <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
-        <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-3xl font-extrabold shadow-md">
-            {targetLetter}
+      {/* ── Target header ──────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-2 bg-canvas p-3 rounded-xl border border-line">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-14 h-14 shrink-0 rounded-2xl bg-pad-saffron text-white flex items-center justify-center font-baloo font-bold text-3xl leading-none pt-1">
+            {Array.from(targetLetter).length > 2 ? Array.from(targetLetter)[0] : targetLetter}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-slate-800">{targetWord}</h3>
+              <h3 className="font-baloo text-xl font-bold leading-tight truncate">{targetWord}</h3>
               <button
                 onClick={() => speakText(`${targetLetter} એટલે ${targetWord}`)}
-                className="p-1 rounded-full bg-amber-100 text-amber-700 hover:bg-amber-200 transition"
-                title={isEn ? 'Listen to Pronunciation' : 'અવાજ સાંભળો'}
+                className="w-11 h-11 flex items-center justify-center rounded-xl bg-action-soft text-pad-saffron hover:bg-line transition shrink-0"
+                title={isEn ? 'Listen to pronunciation' : 'અવાજ સાંભળો'}
+                aria-label={isEn ? 'Listen to pronunciation' : 'અવાજ સાંભળો'}
               >
-                <Volume2 className="w-4 h-4" />
+                <Volume2 className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-sm text-ink-muted truncate">
               {letterMeaning || (isEn ? 'Tracing & handwriting practice' : 'અક્ષર મહાવરો અને લેખન')}
             </p>
           </div>
         </div>
-
-        {/* ISL Sign Button */}
         {onSignClick && (
           <button
             onClick={onSignClick}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-bold transition"
+            className="flex items-center gap-1.5 min-h-tap px-3 rounded-xl bg-surface border border-line text-ink hover:bg-canvas text-sm font-semibold transition shrink-0"
           >
-            <Video className="w-4 h-4 text-indigo-600" />
+            <Video className="w-4 h-4" />
             <span>{isEn ? 'Watch Sign' : 'સાઇન જુઓ'}</span>
           </button>
         )}
       </div>
 
-      {/* ── Practice Mode Switcher ───────────────────────────────────────── */}
-      <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1">
-        <button
-          onClick={() => setPracticeMode('guided')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition ${
-            practiceMode === 'guided'
-              ? 'bg-white text-amber-700 shadow-sm border border-amber-200'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span>{isEn ? 'Guided Practice' : 'માર્ગદર્શિત'}</span>
-        </button>
-        <button
-          onClick={() => setPracticeMode('freehand')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition ${
-            practiceMode === 'freehand'
-              ? 'bg-white text-purple-700 shadow-sm border border-purple-200'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Pencil className="w-3.5 h-3.5" />
-          <span>{isEn ? 'Freehand Practice' : 'સ્વતંત્ર'}</span>
-        </button>
+      {/* ── Practice mode ──────────────────────────────────────────────── */}
+      <div className="flex items-center bg-line/60 p-1 rounded-xl gap-1" role="tablist">
+        {[
+          { id: 'guided', icon: BookOpen, en: 'Guided Practice', gu: 'માર્ગદર્શિત' },
+          { id: 'freehand', icon: Pencil, en: 'Freehand Practice', gu: 'સ્વતંત્ર' }
+        ].map(m => (
+          <button
+            key={m.id}
+            role="tab"
+            aria-selected={practiceMode === m.id}
+            disabled={locked}
+            onClick={() => { setPracticeMode(m.id); resetAttempt(); }}
+            className={`flex-1 flex items-center justify-center gap-1.5 min-h-tap rounded-lg text-sm transition disabled:opacity-60 ${
+              practiceMode === m.id ? 'bg-ink text-white font-bold' : 'text-ink-muted font-medium hover:text-ink'
+            }`}
+          >
+            <m.icon className="w-4 h-4" />
+            <span>{isEn ? m.en : m.gu}</span>
+          </button>
+        ))}
       </div>
+      <p className="text-sm text-ink-muted -mt-1 px-1">
+        {practiceMode === 'guided'
+          ? (isEn ? 'Trace over the grey letter. Start at ① and follow the arrows.' : 'ઝાંખા અક્ષર પર ઘૂંટો. ૧ થી શરૂ કરી તીર પ્રમાણે લખો.')
+          : (isEn ? 'The guide is hidden. Write the letter from memory, anywhere on the pad.' : 'માર્ગદર્શક છુપાવ્યો છે. યાદ રાખીને પેડ પર ક્યાંય પણ લખો.')}
+      </p>
 
-      {/* Freehand mode hint banner */}
-      {practiceMode === 'freehand' && (
-        <p className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 font-medium">
-          {isEn
-            ? '✏️ Freehand mode: the tracing guide is hidden. Write the character from memory!'
-            : '✏️ સ્વતંત્ર મહાવરો: ઝાંખો અક્ષર છુપાવ્યો છે. યાદ રાખીને લખો!'}
-        </p>
-      )}
-
-      {/* ── Stroke-Order Panel (collapsible) ────────────────────────────── */}
-      <div className="rounded-xl border border-slate-200 overflow-hidden">
+      {/* ── Stroke-order guide (collapsible) ───────────────────────────── */}
+      <div className="rounded-xl border border-line bg-surface overflow-hidden">
         <button
           onClick={() => setShowStrokePanel(prev => !prev)}
-          className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition text-xs font-bold text-slate-700"
+          aria-expanded={showStrokePanel}
+          className="w-full flex items-center justify-between px-3 min-h-tap hover:bg-canvas transition text-sm font-bold"
         >
           <span className="flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-slate-500" />
-            {isEn ? 'Stroke Order Guide' : 'સ્ટ્રોક ક્રમ માર્ગદર્શક'}
+            <Layers className="w-4 h-4 text-ink-muted" aria-hidden="true" />
+            {isEn ? 'Stroke Order Guide' : 'રેખાનો ક્રમ'}
+            {hasStrokeData && (
+              <span className="text-xs font-medium text-ink-muted">
+                · {isEn ? `${reference.length} strokes` : `${toGuDigits(reference.length)} રેખા`}
+              </span>
+            )}
           </span>
-          <span className="text-slate-400 text-[10px] select-none">{showStrokePanel ? '▲' : '▼'}</span>
+          <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${showStrokePanel ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
-
         {showStrokePanel && (
-          <div className="bg-white p-3 space-y-3 border-t border-slate-100">
-            {/* Verbal tracing tip from data (always available) */}
-            {traceGuide ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <p className="text-[11px] font-bold text-amber-900 mb-0.5">
-                  {isEn ? 'Writing Tip:' : 'લેખન સૂચના:'}
-                </p>
-                <p className="text-xs text-slate-800 leading-relaxed">{traceGuide}</p>
+          <div className="p-3 space-y-3 border-t border-line">
+            {traceGuide && (
+              <div className="bg-action-soft rounded-lg px-3 py-2">
+                <p className="text-xs font-bold text-pad-saffron-dark mb-0.5">{isEn ? 'Writing tip:' : 'લેખન સૂચના:'}</p>
+                <p className="text-sm leading-relaxed">{traceGuide}</p>
               </div>
-            ) : null}
-
-            {/* Animated stroke-order placeholder */}
-            <div className="rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 p-4 text-center space-y-3">
-              {/* Play / Pause / Replay controls — present for future extensibility */}
-              <div className="flex items-center justify-center gap-2">
+            )}
+            {hasStrokeData ? (
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={handleDemoReplay}
-                  disabled={!hasStrokeData}
-                  className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 transition"
-                  title={isEn ? 'Replay' : 'ફરીથી'}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={handleDemoToggle}
-                  disabled={!hasStrokeData}
-                  className="p-2 rounded-lg bg-amber-500 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-amber-400 transition"
-                  title={demoPlaying ? (isEn ? 'Pause' : 'રોકો') : (isEn ? 'Play' : 'ચલાવો')}
+                  onClick={() => setDemoPlaying(p => !p)}
+                  disabled={locked}
+                  className="flex items-center gap-2 min-h-tap px-4 rounded-xl bg-ink text-white text-sm font-bold disabled:opacity-40 hover:opacity-90 transition shrink-0"
                 >
                   {demoPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  <span>{demoPlaying ? (isEn ? 'Stop' : 'રોકો') : (isEn ? 'Show me how' : 'કેવી રીતે લખવું જુઓ')}</span>
                 </button>
+                <p className="text-sm text-ink-muted">
+                  {isEn ? 'Watch each stroke drawn in order on the pad.' : 'દરેક રેખા ક્રમમાં પેડ પર દોરાતી જુઓ.'}
+                </p>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium leading-snug max-w-xs mx-auto">
+            ) : (
+              <p className="text-sm text-ink-muted">
                 {isEn
-                  ? 'Animated stroke-order demonstration is coming soon. Stroke-path coordinates for Gujarati characters are currently being curated.'
-                  : 'ગુજરાતી અક્ષરો માટે સ્ટ્રોક-ઓર્ડર એનિમેશન ટૂંક સમયમાં ઉમેરાશે. હાલ ડેટા તૈયાર કરવામાં આવી રહ્યો છે.'}
+                  ? 'Stroke-by-stroke checking is not available for this word yet, so only its overall shape is checked.'
+                  : 'આ શબ્દ માટે રેખાવાર ચકાસણી હજુ ઉપલબ્ધ નથી, તેથી ફક્ત આકાર તપાસાશે.'}
               </p>
-            </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* ── Canvas Drawing Area ──────────────────────────────────────────── */}
-      <div className="relative w-full h-[240px] sm:h-[280px] bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300 overflow-hidden">
-        {/* Notebook ruling — purely decorative CSS gradient, never sampled by canvas */}
+      {/* ── Drawing area ───────────────────────────────────────────────── */}
+      <div
+        ref={boxRef}
+        className={`relative w-full ${wide ? 'h-[400px]' : 'h-[320px]'} bg-white rounded-2xl border-[3px] overflow-hidden transition-colors ${padBorder} ${phase === 'fail' ? 'pad-shake' : ''}`}
+      >
         <div
-          className="absolute inset-0 rounded-2xl pointer-events-none z-0 transition-opacity duration-300"
+          className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-300"
           style={{ opacity: showRuling ? 1 : 0, ...rulingStyle }}
         />
-
-        {/* Visual Guide Canvas — pixel-aligned with evaluation reference */}
         <canvas
           ref={guideCanvasRef}
-          className={`absolute inset-0 w-full h-full pointer-events-none select-none transition-opacity duration-200 z-10 ${
-            showGuide ? 'opacity-100' : 'opacity-0'
-          }`}
+          className={`absolute inset-0 w-full h-full pointer-events-none select-none transition-opacity duration-200 z-10 ${showGuide ? 'opacity-100' : 'opacity-0'}`}
         />
-
-        {/* Interactive User Drawing Canvas */}
         <canvas
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-          className="absolute inset-0 w-full h-full cursor-crosshair z-20"
+          ref={inkCanvasRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{ touchAction: 'none' }}
+          className={`absolute inset-0 w-full h-full z-20 ${locked ? 'cursor-default' : 'cursor-crosshair'}`}
+          aria-label={isEn ? `Writing pad for ${targetLetter}` : `${targetLetter} માટે લેખન પેડ`}
         />
+        <canvas ref={overlayCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-30" />
 
-        {/* Empty-canvas hint */}
-        {strokeCount === 0 && (
+        {strokes.length === 0 && phase === 'idle' && !demoPlaying && (
           <div className="absolute bottom-3 left-0 right-0 text-center pointer-events-none z-30">
-            <p className="inline-block text-xs font-medium text-slate-500 bg-white/90 px-3 py-1 rounded-full border border-slate-200 shadow-xs">
-              {targetLetter.length > 2
-                ? (isEn ? `Practice writing '${targetLetter}' with touch or mouse` : `આંગળી અથવા માઉસ વડે '${targetLetter}' લખો`)
-                : (isEn ? `Trace character '${targetLetter}' with touch or mouse` : `આંગળી અથવા માઉસ વડે અક્ષર '${targetLetter}' ઘૂંટો`)}
+            <p className="inline-block text-sm font-medium bg-white/95 px-3 py-1 rounded-full border border-line">
+              {isEn ? `Write '${targetLetter}' with your finger or mouse` : `આંગળી અથવા માઉસ વડે '${targetLetter}' લખો`}
             </p>
           </div>
         )}
+
+        {phase === 'checking' && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-white/55 backdrop-blur-[1px]">
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-ink text-white">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="font-bold text-sm">{isEn ? 'Checking…' : 'તપાસી રહ્યા છીએ…'}</span>
+            </div>
+          </div>
+        )}
+
+        {phase === 'pass' && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-success-soft/60 pointer-events-none">
+            <svg viewBox="0 0 64 64" className="w-28 h-28 sm:w-36 sm:h-36 pad-tick-pop" aria-hidden="true">
+              <circle cx="32" cy="32" r="30" fill="#15803D" />
+              <path d="M18 33 L28 43 L46 23" fill="none" stroke="#fff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" className="pad-tick-draw" />
+            </svg>
+          </div>
+        )}
       </div>
 
-      {/* ── Toolbar Controls ──────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <button
-            onClick={() => setIsEraser(false)}
-            className={`p-2 rounded-lg text-xs font-medium transition ${
-              !isEraser ? 'bg-amber-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-            title={isEn ? 'Pen (Write)' : 'પેન'}
-          >
-            <PenTool className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => setIsEraser(true)}
-            className={`p-2 rounded-lg text-xs font-medium transition ${
-              isEraser ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-            title={isEn ? 'Eraser' : 'રબર'}
-          >
-            <Eraser className="w-4 h-4" />
-          </button>
-
-          {!isEraser && (
-            <div className="flex items-center gap-1 ml-1">
-              {['#1e293b', '#2563eb', '#ea580c', '#16a34a'].map(color => (
+      {/* ── Tools ──────────────────────────────────────────────────────── */}
+      {phase === 'idle' || phase === 'checking' ? (
+        <div className={`flex gap-2 ${wide ? 'flex-row items-center' : 'flex-col'}`}>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-0.5 min-h-tap px-0.5 rounded-xl bg-surface border border-line" role="radiogroup" aria-label={isEn ? 'Pen colour' : 'પેનનો રંગ'}>
+              {PEN_COLORS.map(color => (
                 <button
                   key={color}
+                  role="radio"
+                  aria-checked={penColor === color}
+                  aria-label={isEn ? PEN_NAMES[color][0] : PEN_NAMES[color][1]}
+                  title={isEn ? PEN_NAMES[color][0] : PEN_NAMES[color][1]}
                   onClick={() => setPenColor(color)}
-                  className={`w-5 h-5 rounded-full border-2 transition ${
-                    penColor === color ? 'border-slate-900 scale-110' : 'border-white'
-                  }`}
-                  style={{ backgroundColor: color }}
+                  className={`w-11 h-11 flex items-center justify-center rounded-lg transition ${penColor === color ? 'bg-canvas' : ''}`}
+                >
+                  {/* Selected colour gets a ring, not only a different look */}
+                  <span
+                    className={`w-7 h-7 rounded-full ${penColor === color ? 'ring-[3px] ring-offset-2 ring-pad-saffron' : ''}`}
+                    style={{ backgroundColor: color }}
+                  />
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowRuling(prev => !prev)}
+              aria-pressed={showRuling}
+              className={`min-h-tap px-3 rounded-xl text-sm border transition ${
+                showRuling ? 'bg-canvas border-ink-muted text-ink font-bold' : 'bg-surface border-line text-ink-muted font-medium'
+              }`}
+            >
+              {isEn ? (showRuling ? 'Lines on' : 'Lines off') : (showRuling ? 'રેખા ચાલુ' : 'રેખા બંધ')}
+            </button>
+            <button
+              onClick={handleUndo}
+              disabled={!strokes.length || locked}
+              className="h-11 w-11 flex items-center justify-center rounded-xl bg-surface border border-line disabled:opacity-40 hover:bg-canvas transition"
+              title={isEn ? 'Undo last stroke' : 'છેલ્લી રેખા ભૂંસો'}
+              aria-label={isEn ? 'Undo last stroke' : 'છેલ્લી રેખા ભૂંસો'}
+            >
+              <Undo2 className="w-5 h-5" />
+            </button>
+            <button
+              onClick={resetAttempt}
+              disabled={!strokes.length || locked}
+              className="min-h-tap px-3 rounded-xl bg-surface border border-line text-sm font-semibold disabled:opacity-40 hover:bg-canvas transition"
+            >
+              {isEn ? 'Clear' : 'સાફ કરો'}
+            </button>
+          </div>
+          <button
+            onClick={evaluateWriting}
+            disabled={phase === 'checking'}
+            className={`${wide ? 'ml-auto w-auto' : 'w-full'} min-h-[52px] whitespace-nowrap px-6 rounded-xl bg-pad-saffron hover:bg-pad-saffron-dark disabled:opacity-80 text-white font-baloo font-bold text-lg flex items-center justify-center gap-2 transition active:scale-[0.98]`}
+          >
+            {phase === 'checking'
+              ? <><Loader2 className="w-5 h-5 animate-spin" />{isEn ? 'Checking…' : 'તપાસી રહ્યા છીએ…'}</>
+              : (isEn ? 'Check Writing' : 'લખાણ તપાસો')}
+          </button>
+        </div>
+      ) : null}
+
+      {/* ── Pass ───────────────────────────────────────────────────────── */}
+      {phase === 'pass' && result && (
+        <div role="status" className="pad-slide-up rounded-2xl border-2 border-pad-pass bg-success-soft p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-baloo text-2xl font-bold text-pad-pass leading-tight">શાબાશ! સાચું લખ્યું</p>
+              <p className="text-sm text-ink">Well done! You wrote it correctly.</p>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-xs font-bold uppercase tracking-wide text-ink-muted">{isEn ? 'Score' : 'ગુણ'}</div>
+              <div className="font-baloo text-3xl font-bold text-pad-pass leading-none tabular-nums">{result.score}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1" aria-hidden="true">
+              {[0, 1, 2].map(i => (
+                <Star
+                  key={i}
+                  style={{ animationDelay: `${0.35 + i * 0.12}s` }}
+                  className={`w-8 h-8 pad-star-in ${i < result.stars ? 'fill-action text-action' : 'fill-surface text-ink-muted/40'}`}
                 />
               ))}
             </div>
-          )}
-
-          {/* Notebook Ruling Toggle */}
-          <button
-            onClick={() => setShowRuling(prev => !prev)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
-              showRuling
-                ? 'bg-blue-50 border-blue-200 text-blue-700'
-                : 'bg-slate-100 border-slate-200 text-slate-500'
-            }`}
-            title={isEn ? 'Toggle notebook ruling' : 'નોટ-બુક લાઇન'}
-          >
-            <span className="text-[11px]">{isEn ? (showRuling ? 'Lines On' : 'Lines Off') : (showRuling ? 'રેખા ✓' : 'રેખા')}</span>
-          </button>
+            <p className="text-sm font-bold text-pad-ink">
+              {result.stars > 0
+                ? <>+{result.stars} તારા મળ્યા <span className="font-medium text-ink-muted">· +{result.stars} stars earned</span></>
+                : <>આ અક્ષરના તારા પહેલેથી મળ્યા છે <span className="block font-medium text-ink-muted">Stars already earned for this letter</span></>}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={resetAttempt}
+              className={`${wide ? 'flex-none' : 'flex-1'} min-h-[52px] whitespace-nowrap px-4 rounded-xl bg-surface border border-line text-ink font-bold flex items-center justify-center gap-2 hover:bg-canvas transition`}
+            >
+              <RotateCcw className="w-4 h-4" />
+              {isEn ? 'Write again' : 'ફરી લખો'}
+            </button>
+            {hasNext && (
+              <button
+                onClick={handleNext}
+                className={`${wide ? 'flex-none ml-auto' : 'flex-1'} min-h-[52px] whitespace-nowrap px-6 rounded-xl bg-pad-saffron hover:bg-pad-saffron-dark text-white font-baloo font-bold text-lg flex items-center justify-center gap-2 transition`}
+              >
+                {isEn ? 'Next' : 'આગળ'}
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
+      )}
 
-        {/* Clear, Undo, Check Actions */}
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleUndo}
-            disabled={history.length === 0}
-            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 text-xs font-medium transition"
-            title={isEn ? 'Undo' : 'પાછળ જાઓ'}
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => clearCanvas(true)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition"
-          >
-            {isEn ? 'Clear' : 'સાફ કરો'}
-          </button>
-
-          <button
-            onClick={evaluateWriting}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition active:scale-95"
-          >
-            <Check className="w-4 h-4" />
-            <span>{isEn ? 'Check Writing' : 'તપાસો'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ── Score and Feedback Banner ─────────────────────────────────────── */}
-      {scoreResult && (
-        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shadow">
-              {scoreResult.score}%
+      {/* ── Fail ───────────────────────────────────────────────────────── */}
+      {phase === 'fail' && result && (
+        <div role="alert" className="pad-slide-up rounded-2xl border-2 border-pad-wrong bg-danger-soft p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-11 h-11 shrink-0 rounded-full bg-pad-wrong text-white flex items-center justify-center" aria-hidden="true"><X className="w-6 h-6" strokeWidth={3} /></div>
+            <div className="min-w-0 flex-1">
+              <p className="font-baloo text-xl font-bold text-pad-wrong leading-tight">{err?.gu}</p>
+              <p className="text-sm text-ink">{err?.en}</p>
             </div>
-            <div>
-              <div className="flex items-center gap-1">
-                {[...Array(scoreResult.stars)].map((_, i) => (
-                  <Sparkles key={i} className="w-4 h-4 text-amber-500 fill-amber-400" />
-                ))}
-                {scoreResult.stars > 0 && (
-                  <span className="text-xs font-bold text-emerald-800 ml-1">
-                    +{scoreResult.stars * 5} {isEn ? 'Stars!' : 'પોઇન્ટ્સ!'}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs font-medium text-emerald-900 mt-0.5">{scoreResult.message}</p>
+            <div className="text-right shrink-0">
+              <div className="text-xs font-bold uppercase tracking-wide text-ink-muted">{isEn ? 'Score' : 'ગુણ'}</div>
+              <div className="font-baloo text-2xl font-bold text-pad-ink leading-none tabular-nums">{result.score}</div>
+              <div className="text-xs text-ink-muted">{isEn ? `pass ${writingThreshold}` : `પાસ ${toGuDigits(writingThreshold)}`}</div>
             </div>
           </div>
-          <button
-            onClick={() => clearCanvas(true)}
-            className="text-xs text-emerald-700 font-bold hover:underline"
-          >
-            {isEn ? 'Try Again' : 'ફરી લખો'}
-          </button>
+
+          {strokeNo !== null && strokeNo !== undefined && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm font-bold bg-surface rounded-xl border border-line px-3 py-2">
+              <span className="text-pad-ink">
+                {`રેખા ${toGuDigits(strokeNo + 1)}`} <span className="font-medium text-ink-muted">· Stroke {strokeNo + 1}</span>
+              </span>
+              {result.wrongStroke !== null && (
+                <span className="flex items-center gap-1.5">
+                  <svg width="26" height="8" aria-hidden="true"><line x1="2" y1="4" x2="24" y2="4" stroke={C.wrong} strokeWidth="4" strokeDasharray="6 4" strokeLinecap="round" /></svg>
+                  {isEn ? 'Your stroke' : 'તમારી રેખા'}
+                </span>
+              )}
+              {result.refStroke !== null && (
+                <span className="flex items-center gap-1.5">
+                  <svg width="26" height="8" aria-hidden="true"><line x1="2" y1="4" x2="20" y2="4" stroke={C.correct} strokeWidth="4" strokeLinecap="round" /><circle cx="22" cy="4" r="3.5" fill={C.correct} /></svg>
+                  {isEn ? 'Correct stroke' : 'સાચી રેખા'}
+                </span>
+              )}
+            </div>
+          )}
+
+          {onOpenClip && (
+            <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
+              <span className="text-ink-muted">{isEn ? 'Watch again:' : 'ફરી જુઓ:'}</span>
+              <button
+                onClick={() => onOpenClip('write')}
+                className="min-h-tap px-3 rounded-xl bg-surface border border-line text-ink hover:bg-canvas flex items-center gap-1.5 transition"
+              >
+                <PenLine className="w-4 h-4 text-pad-saffron" />
+                {isEn ? 'How to write' : 'કેવી રીતે લખવું'}
+              </button>
+              <button
+                onClick={() => onOpenClip('say')}
+                className="min-h-tap px-3 rounded-xl bg-surface border border-line text-ink hover:bg-canvas flex items-center gap-1.5 transition"
+              >
+                <Smile className="w-4 h-4 text-pad-saffron" />
+                {isEn ? 'How to say' : 'કેવી રીતે બોલવું'}
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {result.refStroke !== null && (
+              <button
+                onClick={() => setReplayKey(k => k + 1)}
+                className={`${wide ? 'flex-none' : 'flex-1'} min-h-[52px] whitespace-nowrap px-4 rounded-xl bg-surface border border-line text-ink font-bold flex items-center justify-center gap-2 hover:bg-canvas transition`}
+              >
+                <Play className="w-4 h-4" />
+                {isEn ? 'Watch again' : 'ફરી જુઓ'}
+              </button>
+            )}
+            <button
+              onClick={resetAttempt}
+              className={`${wide ? 'flex-none ml-auto' : 'flex-1'} min-h-[52px] whitespace-nowrap px-6 rounded-xl bg-pad-saffron hover:bg-pad-saffron-dark text-white font-baloo font-bold text-lg flex items-center justify-center gap-2 transition`}
+            >
+              <RotateCcw className="w-5 h-5" />
+              {isEn ? 'Try again' : 'ફરી પ્રયત્ન કરો'}
+            </button>
+          </div>
         </div>
       )}
     </div>
