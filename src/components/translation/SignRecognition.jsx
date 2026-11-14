@@ -1,17 +1,14 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { recognizedGesturesList } from '../../data/phrasebookData';
 import {
   Camera,
   CameraOff,
-  Sparkles,
   Volume2,
-  CheckCircle2,
-  RefreshCw,
-  Layers,
-  ShieldCheck,
-  Copy
+  Plus,
+  Layers
 } from 'lucide-react';
+import { Card, Button, Chip } from '../ui';
 
 export const SignRecognition = () => {
   const { speakText, showToast, uiLanguage } = useApp();
@@ -122,49 +119,38 @@ export const SignRecognition = () => {
   return (
     <div className="space-y-4">
       {/* Live Camera Feed & Landmark HUD */}
-      <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl text-white space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
-              {isEn ? 'Camera Sign Practice – Prototype' : 'કેમેરા સાઇન પ્રેક્ટિસ – પ્રોટોટાઇપ'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
+      <Card className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold">
+            {isEn ? 'Camera sign practice (prototype)' : 'કેમેરા સાઇન પ્રેક્ટિસ (પ્રોટોટાઇપ)'}
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
               onClick={() => setShowSkeleton(!showSkeleton)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition flex items-center gap-1 ${
-                showSkeleton
-                  ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                  : 'bg-slate-800 border-slate-700 text-slate-400'
+              aria-pressed={showSkeleton}
+              className={`inline-flex items-center gap-1.5 min-h-tap px-3 rounded-xl text-sm border transition ${
+                showSkeleton ? 'bg-canvas border-ink-muted font-bold' : 'bg-surface border-line text-ink-muted font-medium'
               }`}
             >
-              <Layers className="w-3.5 h-3.5" />
-              <span>{showSkeleton ? (isEn ? 'Hand Guide On' : 'હેન્ડ ગાઇડ ચાલુ') : (isEn ? 'Hand Guide Off' : 'હેન્ડ ગાઇડ બંધ')}</span>
+              <Layers className="w-4 h-4" aria-hidden="true" />
+              {showSkeleton ? (isEn ? 'Hand guide on' : 'હેન્ડ ગાઇડ ચાલુ') : (isEn ? 'Hand guide off' : 'હેન્ડ ગાઇડ બંધ')}
             </button>
-
-            <button
-              onClick={toggleCamera}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                isCameraActive
-                  ? 'bg-rose-600 hover:bg-rose-500 text-white'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-              }`}
-            >
-              {isCameraActive ? <CameraOff className="w-3.5 h-3.5" /> : <Camera className="w-3.5 h-3.5" />}
-              <span>{isCameraActive ? (isEn ? 'Stop Camera' : 'કેમેરા બંધ') : (isEn ? 'Start Camera' : 'કેમેરા શરૂ')}</span>
-            </button>
+            <Button variant={isCameraActive ? 'secondary' : 'primary'} onClick={toggleCamera}>
+              {isCameraActive ? <CameraOff className="w-4 h-4" aria-hidden="true" /> : <Camera className="w-4 h-4" aria-hidden="true" />}
+              {isCameraActive ? (isEn ? 'Stop camera' : 'કેમેરા બંધ') : (isEn ? 'Start camera' : 'કેમેરા શરૂ')}
+            </Button>
           </div>
         </div>
 
-        <div className="p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs">
+        <p className="text-sm p-3 rounded-xl bg-canvas border border-line">
           {isEn
             ? 'AI sign recognition model is not yet connected. The camera functions as a visual mirror for signing practice. Use the reference signs below to practice and assemble Gujarati sentences.'
             : 'AI સાઇન ઓળખ મોડેલ હજુ જોડાયેલ નથી. કેમેરા સાઇનિંગ પ્રેક્ટિસ માટે મિરર તરીકે કાર્ય કરે છે. વાક્ય બનાવવા નીચે આપેલા સંદર્ભ સંકેતોનો ઉપયોગ કરો.'}
-        </div>
+        </p>
 
         {/* Viewport for Video + Canvas Overlay */}
-        <div className="relative w-full h-[260px] sm:h-[300px] bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800">
+        <div className="relative w-full aspect-[4/3] sm:aspect-video bg-ink rounded-2xl overflow-hidden flex items-center justify-center">
           {isCameraActive && (
             <video
               ref={videoRef}
@@ -176,14 +162,14 @@ export const SignRecognition = () => {
           )}
 
           {!isCameraActive && (
-            <div className="text-center p-4 z-10 space-y-2">
-              <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto text-slate-400 text-2xl">
-                📷
+            <div className="text-center p-4 z-10 space-y-2 text-white">
+              <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto">
+                <Camera className="w-8 h-8" aria-hidden="true" />
               </div>
-              <p className="text-sm font-bold text-slate-300">{isEn ? 'Camera is currently off' : 'કેમેરા બંધ છે'}</p>
-              <p className="text-xs text-slate-500 max-w-xs">
+              <p className="font-bold">{isEn ? 'Camera is off' : 'કેમેરા બંધ છે'}</p>
+              <p className="text-sm text-white/80 max-w-xs">
                 {isEn
-                  ? 'Click "Start Camera" above for mirror practice or choose a reference gesture below.'
+                  ? 'Press "Start camera" for mirror practice, or choose a reference sign below.'
                   : 'પ્રેક્ટિસ માટે "કેમેરા શરૂ" કરો અથવા નીચેથી સંદર્ભ સંકેત પસંદ કરો.'}
               </p>
             </div>
@@ -198,90 +184,63 @@ export const SignRecognition = () => {
           />
 
           {/* HUD Reference Sign Display */}
-          <div className="absolute top-3 left-3 bg-black/75 backdrop-blur border border-white/10 rounded-lg p-2 text-xs z-30">
-            <div className="flex items-center gap-2">
-              <span className="text-amber-400 font-bold">{isEn ? 'Selected sign:' : 'પસંદ કરેલ સાઇન:'}</span>
-              <span className="font-extrabold text-white">{currentGesture.gesture}</span>
-            </div>
+          <div className="absolute top-3 left-3 bg-ink/85 rounded-lg px-2.5 py-1.5 text-sm z-30 text-white">
+            <span className="text-white/80">{isEn ? 'Selected sign:' : 'પસંદ કરેલ સાઇન:'}</span>{' '}
+            <span className="font-bold">{currentGesture.gesture}</span>
           </div>
 
-          <div className="absolute bottom-3 right-3 bg-black/75 border border-white/10 rounded-lg px-2.5 py-1 text-[10px] text-slate-300 z-30">
+          <div className="absolute bottom-3 right-3 bg-ink/85 rounded-lg px-2.5 py-1 text-xs text-white/80 z-30">
             {currentGesture.keypoints}
           </div>
         </div>
 
         {cameraError && (
-          <div className="p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs">
+          <p role="alert" className="text-sm p-3 rounded-xl bg-danger-soft text-danger font-medium">
             {cameraError}
-          </div>
+          </p>
         )}
 
         {/* Gesture switcher to test different signs */}
         <div>
-          <span className="text-xs font-bold text-slate-400 block mb-1.5">
-            {isEn ? 'Reference signs for practice (click to select and add to sentence):' : 'પ્રેક્ટિસ માટેના સંકેતો (પસંદ કરી વાક્યમાં ઉમેરો):'}
-          </span>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {recognizedGesturesList.map((g, idx) => {
-              const isSelected = activeGestureIdx === idx;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => setActiveGestureIdx(idx)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
-                    isSelected
-                      ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  {g.gesture}
-                </button>
-              );
-            })}
+          <p className="text-sm font-semibold text-ink-muted mb-2">
+            {isEn ? 'Reference signs: choose one, then add it to the sentence' : 'પ્રેક્ટિસ માટેના સંકેતો (પસંદ કરી વાક્યમાં ઉમેરો):'}
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {recognizedGesturesList.map((g, idx) => (
+              <Chip key={idx} active={activeGestureIdx === idx} onClick={() => setActiveGestureIdx(idx)}>
+                {g.gesture}
+              </Chip>
+            ))}
           </div>
         </div>
 
-        {/* Add Recognized Gesture to Current Sentence */}
-        <div className="flex justify-end pt-1">
-          <button
-            onClick={addGestureToSentence}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition active:scale-95 shadow"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>{isEn ? 'Add Sign to Sentence (+)' : 'આ સાઇન વાક્યમાં ઉમેરો'}</span>
-          </button>
-        </div>
-      </div>
+        <Button onClick={addGestureToSentence} className="w-full sm:w-auto min-h-[52px] text-base">
+          <Plus className="w-5 h-5" aria-hidden="true" />
+          {isEn ? 'Add sign to sentence' : 'આ સાઇન વાક્યમાં ઉમેરો'}
+        </Button>
+      </Card>
 
       {/* Recognized Gujarati Output Box */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-            {isEn ? 'Constructed Gujarati Sentence:' : 'બનાવેલ ગુજરાતી વાક્ય:'}
-          </span>
+      <Card className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold">{isEn ? 'Gujarati sentence' : 'બનાવેલ ગુજરાતી વાક્ય'}</h2>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setRecognizedSentence('')}
-              className="text-xs text-slate-500 hover:text-slate-800 font-medium"
-            >
+            <Button variant="ghost" onClick={() => setRecognizedSentence('')}>
               {isEn ? 'Clear' : 'સાફ કરો'}
-            </button>
-            <button
-              onClick={handleSpeakSentence}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition shadow-sm"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>{isEn ? 'Speak Gujarati Voice (TTS)' : 'ગુજરાતીમાં બોલો'}</span>
-            </button>
+            </Button>
+            <Button variant="secondary" onClick={handleSpeakSentence}>
+              <Volume2 className="w-4 h-4" aria-hidden="true" />
+              {isEn ? 'Speak in Gujarati' : 'ગુજરાતીમાં બોલો'}
+            </Button>
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 min-h-[70px] flex items-center justify-between">
-          <p className="text-base font-bold text-slate-900 leading-relaxed">
+        <div className="p-4 rounded-xl bg-canvas border border-line min-h-[72px] flex items-center" aria-live="polite">
+          <p className={`text-lg leading-relaxed ${recognizedSentence ? 'font-bold' : 'text-ink-muted'}`}>
             {recognizedSentence || (isEn ? 'Turn on camera for self-practice or select a reference sign above to build a sentence...' : 'સ્વ-પ્રેક્ટિસ માટે કેમેરા શરૂ કરો અથવા વાક્ય બનાવવા ઉપરથી સંકેત પસંદ કરો...')}
           </p>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

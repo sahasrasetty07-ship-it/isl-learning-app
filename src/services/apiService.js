@@ -5,7 +5,7 @@
  * backend REST endpoints via the VITE_USE_MOCK_API or VITE_API_BASE_URL environment variable.
  */
 
-import { gujaratiAlphabets, sampleSentences } from '../data/gujaratiAlphabets';
+import { gujaratiAlphabets } from '../data/gujaratiAlphabets';
 import { gujaratiNumbers } from '../data/gujaratiNumbers';
 import { mathLessons } from '../data/mathLessons';
 import { scienceLessons } from '../data/scienceLessons';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { phrasebookData } from '../../data/phrasebookData';
 import { gujaratiAlphabets } from '../../data/gujaratiAlphabets';
@@ -6,12 +6,12 @@ import { gujaratiNumbers } from '../../data/gujaratiNumbers';
 import {
   Mic,
   MicOff,
-  Sparkles,
   Volume2,
   Video,
-  CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Hand
 } from 'lucide-react';
+import { Card, Button, Chip } from '../ui';
 
 // Normalize text for consistent matching: Unicode NFC, strip punctuation, collapse whitespace
 const stripPunct = (s) =>
@@ -141,6 +141,9 @@ export const SpeechToSign = () => {
   const [unmatchedWords, setUnmatchedWords] = useState([]);
   const [speechSupported, setSpeechSupported] = useState(true);
   const recognitionRef = useRef(null);
+  // Recognition handlers are created once; read the latest language/toast through a ref
+  const latestRef = useRef({ isEn, showToast });
+  latestRef.current = { isEn, showToast };
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -164,6 +167,7 @@ export const SpeechToSign = () => {
       recognition.onerror = (event) => {
         console.warn('Speech recognition error:', event.error);
         setIsListening(false);
+        const { isEn, showToast } = latestRef.current;
         showToast(
           isEn
             ? 'Microphone or online STT unavailable in this browser. Try the quick test phrases below.'
@@ -177,6 +181,7 @@ export const SpeechToSign = () => {
       };
 
       recognitionRef.current = recognition;
+      return () => recognition.abort();
     } else {
       setSpeechSupported(false);
     }
@@ -190,7 +195,7 @@ export const SpeechToSign = () => {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.start();
-        } catch (e) {
+        } catch {
           setIsListening(false);
         }
       } else {
@@ -223,54 +228,57 @@ export const SpeechToSign = () => {
   return (
     <div className="space-y-4">
       {/* Mic Input Container */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm text-center space-y-4">
+      <Card className="text-center space-y-4">
         <div>
-          <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-            {isEn ? 'Gujarati Speech → ISL Sign' : 'ગુજરાતી વાણી → સાઇન લેંગ્વેજ'}
-          </span>
-          <h3 className="text-lg font-black text-slate-900 mt-1">
-            {isEn ? 'Speak in Gujarati to Generate Sign Language' : 'ગુજરાતીમાં બોલો અને સાઇન સંકેત મેળવો'}
-          </h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto mt-0.5">
+          <h2 className="text-xl font-bold">
+            {isEn ? 'Speak Gujarati, see the signs' : 'ગુજરાતીમાં બોલો અને સાઇન સંકેત મેળવો'}
+          </h2>
+          <p className="text-sm text-ink-muted max-w-sm mx-auto mt-1">
             {isEn
-              ? 'Spoken Gujarati is transcribed to text and mapped directly to approved ISL sign guides.'
+              ? 'Spoken Gujarati is written out as text and matched to approved ISL sign guides.'
               : 'ગુજરાતી અવાજ આપોઆપ લખાણમાં રૂપાંતરિત થઈને અધિકૃત ISL સંકેતો દર્શાવશે.'}
           </p>
         </div>
 
-        {/* Mic Button Subtitle */}
+        {/* Mic button: state shown by icon and text, not colour alone */}
         <div className="py-2">
           <button
+            type="button"
             onClick={toggleListening}
-            className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto transition-all shadow-xl active:scale-95 ${
+            aria-pressed={isListening}
+            aria-label={isListening ? (isEn ? 'Stop listening' : 'સાંભળવાનું બંધ કરો') : (isEn ? 'Start listening' : 'સાંભળવાનું શરૂ કરો')}
+            className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto transition active:scale-95 ${
               isListening
-                ? 'bg-rose-500 text-white ring-8 ring-rose-200 animate-record-pulse'
-                : 'bg-gradient-to-tr from-purple-600 to-indigo-600 text-white hover:opacity-90 shadow-purple-600/30'
+                ? 'bg-ink text-white ring-8 ring-action-soft animate-record-pulse'
+                : 'bg-action hover:bg-action-hover text-white'
             }`}
           >
-            {isListening ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
+            {isListening ? <MicOff className="w-10 h-10" aria-hidden="true" /> : <Mic className="w-10 h-10" aria-hidden="true" />}
           </button>
-          <p className="text-xs font-bold text-slate-600 mt-3">
+          <p className="font-semibold mt-3" aria-live="polite">
             {isListening
-              ? (isEn ? 'Listening in Gujarati (gu-IN)... Speak now' : 'સાંભળી રહ્યા છીએ... બોલો')
-              : (isEn ? 'Tap mic to speak Gujarati voice' : 'માઇક દબાવી ગુજરાતીમાં બોલો')}
+              ? (isEn ? 'Listening in Gujarati... speak now' : 'સાંભળી રહ્યા છીએ... બોલો')
+              : (isEn ? 'Tap the mic and speak Gujarati' : 'માઇક દબાવી ગુજરાતીમાં બોલો')}
           </p>
         </div>
 
         {!speechSupported && (
-          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 text-xs">
-            {isEn
-              ? 'Browser speech recognition (gu-IN) is not available in this browser. You can click the test phrases below to test sign matching.'
-              : 'તમારા બ્રાઉઝરમાં ગુજરાતી વાણી ઓળખ ઉપલબ્ધ નથી. સાઇન સંકેત જોવા માટે નીચેના ટેસ્ટ વાક્યો વાપરો.'}
-          </div>
+          <p className="text-sm p-3 rounded-xl bg-canvas border border-line text-left flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-action shrink-0 mt-0.5" aria-hidden="true" />
+            <span>
+              {isEn
+                ? 'Browser speech recognition (gu-IN) is not available in this browser. You can click the test phrases below to test sign matching.'
+                : 'તમારા બ્રાઉઝરમાં ગુજરાતી વાણી ઓળખ ઉપલબ્ધ નથી. સાઇન સંકેત જોવા માટે નીચેના ટેસ્ટ વાક્યો વાપરો.'}
+            </span>
+          </p>
         )}
 
         {/* Quick Test Phrases */}
-        <div className="border-t border-slate-100 pt-3">
-          <span className="text-[11px] font-bold text-slate-400 block mb-1.5">
-            {isEn ? 'Quick Test Phrases (click to test sign lookup):' : 'ઝડપી ટેસ્ટ વાક્યો (સાઇન સંકેત જોવા ક્લિક કરો):'}
-          </span>
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
+        <div className="border-t border-line pt-4">
+          <p className="text-sm font-semibold text-ink-muted mb-2">
+            {isEn ? 'Or try a phrase:' : 'ઝડપી ટેસ્ટ વાક્યો:'}
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
             {[
               'નમસ્તે, તમારું નામ શું છે?',
               'મને મદદ જોઈએ છે',
@@ -279,75 +287,62 @@ export const SpeechToSign = () => {
               'કમળ અને ઘર',
               'એક બે ત્રણ'
             ].map(txt => (
-              <button
-                key={txt}
-                onClick={() => handleSelectTestPhrase(txt)}
-                className="text-[11px] bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-900 px-3 py-1 rounded-full transition border border-slate-200"
-              >
+              <Chip key={txt} active={spokenText === txt} onClick={() => handleSelectTestPhrase(txt)}>
                 {txt}
-              </button>
+              </Chip>
             ))}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Recognized Speech Result */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500 uppercase">
-            {isEn ? 'Recognized Gujarati Speech:' : 'ઓળખાયેલ ગુજરાતી વાણી:'}
-          </span>
+      <Card className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-bold">{isEn ? 'What was said' : 'ઓળખાયેલ ગુજરાતી વાણી'}</h2>
           {spokenText && (
-            <button
-              onClick={() => speakText(spokenText)}
-              className="text-xs text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>{isEn ? 'Replay Speech' : 'ફરી સાંભળો'}</span>
-            </button>
+            <Button variant="secondary" onClick={() => speakText(spokenText)}>
+              <Volume2 className="w-4 h-4" aria-hidden="true" />
+              {isEn ? 'Replay' : 'ફરી સાંભળો'}
+            </Button>
           )}
         </div>
         {spokenText ? (
-          <p className="text-base font-bold text-slate-900 bg-purple-50/50 p-3 rounded-xl border border-purple-200">
-            {spokenText}
-          </p>
+          <p className="text-xl font-bold p-3 rounded-xl bg-canvas border border-line">{spokenText}</p>
         ) : (
-          <p className="text-xs text-slate-400 italic p-3 rounded-xl border border-dashed border-slate-200">
+          <p className="text-sm text-ink-muted p-3 rounded-xl border border-dashed border-line">
             {isEn
               ? 'No speech captured yet. Tap the mic or choose a test phrase above.'
               : 'હજુ કોઈ વાણી પકડાઈ નથી. માઇક દબાવો અથવા ઉપરથી ટેસ્ટ વાક્ય પસંદ કરો.'}
           </p>
         )}
-      </div>
+      </Card>
 
       {/* Matched Sign Language Sequences */}
-      <div className="bg-slate-900 text-white rounded-2xl border border-slate-800 p-4 shadow-lg space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <h4 className="text-sm font-bold text-white flex items-center gap-2">
-            <Video className="w-4 h-4 text-purple-400" />
-            <span>{isEn ? 'Matched ISL Sign Sequences' : 'મેળવાયેલા સાઇન સંકેતો'}</span>
-          </h4>
-          <span className="text-xs text-slate-400">
-            {matchedSigns.length} {isEn ? 'signs mapped' : 'સાઇન ઉપલબ્ધ'}
+      <Card className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Video className="w-5 h-5 text-action" aria-hidden="true" />
+            {isEn ? 'Signs' : 'મેળવાયેલા સાઇન સંકેતો'}
+          </h2>
+          <span className="text-sm text-ink-muted">
+            {matchedSigns.length} {isEn ? 'found' : 'સાઇન ઉપલબ્ધ'}
           </span>
         </div>
 
         {/* No Direct Match State */}
         {matchedSigns.length === 0 && spokenText && (
-          <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 text-center space-y-2.5">
-            <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-            <p className="text-sm font-bold text-amber-300">
-              {isEn
-                ? 'No matching signs found in dictionary.'
-                : 'આ વાણી માટે શબ્દકોષમાં કોઈ સંકેત મળ્યો નથી.'}
+          <div className="p-5 rounded-xl bg-canvas border border-line text-center space-y-2">
+            <AlertCircle className="w-8 h-8 text-action mx-auto" aria-hidden="true" />
+            <p className="font-bold">
+              {isEn ? 'No matching signs found in dictionary.' : 'આ વાણી માટે શબ્દકોષમાં કોઈ સંકેત મળ્યો નથી.'}
             </p>
             {unmatchedWords.length > 0 && (
-              <p className="text-xs text-slate-300 max-w-sm mx-auto">
+              <p className="text-sm max-w-sm mx-auto">
                 {isEn ? 'Unsupported words: ' : 'ઉપલબ્ધ ન હોય તેવા શબ્દો: '}
-                <span className="font-semibold text-slate-200">{unmatchedWords.join(', ')}</span>
+                <span className="font-semibold">{unmatchedWords.join(', ')}</span>
               </p>
             )}
-            <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">
+            <p className="text-sm text-ink-muted max-w-sm mx-auto leading-relaxed">
               {isEn
                 ? 'The current dictionary covers curated greetings, school phrases, numbers (1-10), and select vocabulary words. Additional signs will be added in future updates.'
                 : 'હાલનો શબ્દકોષ મુખ્ય અભિવાદન, શાળા વાક્યો, અંકો (૧-૧૦) અને પસંદગીના શબ્દો આવરી લે છે. વધુ સંકેતો ભવિષ્યમાં ઉમેરવામાં આવશે.'}
@@ -357,60 +352,41 @@ export const SpeechToSign = () => {
 
         {/* Idle prompt before speech */}
         {matchedSigns.length === 0 && !spokenText && (
-          <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-xs text-slate-400">
+          <p className="p-5 rounded-xl bg-canvas border border-line text-center text-sm text-ink-muted">
             {isEn
               ? 'Speak into the mic or select a test phrase to display matching ISL signs.'
               : 'સાઇન સંકેતો જોવા માટે માઇકમાં બોલો અથવા ટેસ્ટ વાક્ય પસંદ કરો.'}
-          </div>
+          </p>
         )}
 
         {/* Matched Sign Grid */}
         {matchedSigns.length > 0 && (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {matchedSigns.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex flex-col justify-between space-y-2.5"
-                >
+                <li key={idx} className="p-4 rounded-xl bg-canvas border border-line flex flex-col justify-between gap-3">
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <h5 className="font-extrabold text-amber-300 text-sm">{item.gujarati}</h5>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          item.matchType === 'phrase'
-                            ? 'bg-purple-900/60 text-purple-200 border border-purple-500/30'
-                            : item.matchType === 'number'
-                            ? 'bg-blue-900/60 text-blue-200 border border-blue-500/30'
-                            : 'bg-emerald-900/60 text-emerald-200 border border-emerald-500/30'
-                        }`}
-                      >
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-xl font-bold leading-tight">{item.gujarati}</h3>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-surface border border-line shrink-0">
                         {item.matchType === 'phrase'
-                          ? (isEn ? 'Full Phrase' : 'વાક્ય સંકેત')
+                          ? (isEn ? 'Full phrase' : 'વાક્ય સંકેત')
                           : item.matchType === 'number'
                           ? (isEn ? 'Number' : 'સંખ્યા સંકેત')
                           : (isEn ? 'Word' : 'શબ્દ સંકેત')}
                       </span>
                     </div>
-
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                      <span>{item.english}</span>
-                      <span>•</span>
-                      <span className="text-slate-500">{item.category}</span>
-                    </div>
-
-                    <p className="text-xs text-slate-200 leading-relaxed font-medium pt-0.5">
-                      {item.signDescription}
-                    </p>
-
+                    <p className="text-sm text-ink-muted">{item.english} · {item.category}</p>
+                    <p className="text-sm leading-relaxed">{item.signDescription}</p>
                     {item.handShape && (
-                      <p className="text-[11px] text-amber-300/90 font-medium">
-                        ✋ {item.handShape}
+                      <p className="text-sm text-ink-muted flex items-start gap-1.5">
+                        <Hand className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                        {item.handShape}
                       </p>
                     )}
                   </div>
 
-                  <button
+                  <Button
                     onClick={() => {
                       setActiveVideoModal({
                         title: item.gujarati,
@@ -422,25 +398,23 @@ export const SpeechToSign = () => {
                         category: item.category
                       });
                     }}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition mt-1 active:scale-95"
+                    className="w-full"
                   >
-                    <Video className="w-3.5 h-3.5" />
-                    <span>{isEn ? 'View Sign Guide' : 'સાઇન માર્ગદર્શિકા જુઓ'}</span>
-                  </button>
-                </div>
+                    <Video className="w-4 h-4" aria-hidden="true" />
+                    {isEn ? 'Watch the sign' : 'સાઇન માર્ગદર્શિકા જુઓ'}
+                  </Button>
+                </li>
               ))}
-            </div>
+            </ul>
 
             {/* Notice for unsupported words in an otherwise matched sentence */}
             {unmatchedWords.length > 0 && (
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="p-3 rounded-xl bg-canvas border border-line text-sm flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-action shrink-0 mt-0.5" aria-hidden="true" />
                 <div>
-                  <span className="font-bold text-amber-300">
-                    {isEn ? 'Unsupported words:' : 'શબ્દકોષમાં ઉપલબ્ધ ન હોય તેવા શબ્દો:'}
-                  </span>{' '}
-                  <span className="font-semibold text-slate-200">{unmatchedWords.join(', ')}</span>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <span className="font-bold">{isEn ? 'Unsupported words:' : 'શબ્દકોષમાં ઉપલબ્ધ ન હોય તેવા શબ્દો:'}</span>{' '}
+                  <span className="font-semibold">{unmatchedWords.join(', ')}</span>
+                  <p className="text-ink-muted mt-0.5">
                     {isEn
                       ? 'These words are currently not in the curated sign dictionary.'
                       : 'આ શબ્દો માટે હાલના શબ્દકોષમાં સંકેત ઉપલબ્ધ નથી.'}
@@ -450,7 +424,7 @@ export const SpeechToSign = () => {
             )}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 };

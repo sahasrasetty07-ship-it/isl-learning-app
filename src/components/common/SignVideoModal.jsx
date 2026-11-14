@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { buildYouTubeEmbedUrl } from '../../data/signVideos';
-import { X, Volume2, ShieldCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, Volume2, ShieldCheck, AlertCircle, Hand } from 'lucide-react';
 
 export const SignVideoModal = () => {
   const { activeVideoModal, setActiveVideoModal, speakText, uiLanguage } = useApp();
@@ -28,7 +28,6 @@ export const SignVideoModal = () => {
     youtubeId,
     startTime,
     endTime,
-    status,
     category 
   } = activeVideoModal;
 
@@ -71,156 +70,142 @@ export const SignVideoModal = () => {
     if (gujarati) speakText(gujarati);
   };
 
+  const heading = title || (isEn ? 'ISL Sign Demonstration' : 'ISL સંકેત વિડીયો');
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 animate-fade-in">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 bg-ink/70 flex items-end sm:items-center justify-center sm:p-4 animate-fade-in" role="dialog" aria-modal="true" aria-label={heading}>
+      <div className="bg-surface w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl overflow-hidden border border-line flex flex-col max-h-[94vh]">
         {/* Modal Header */}
-        <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-white font-bold text-lg">
-              {gujarati || 'સ'}
+        <div className="p-4 flex items-center justify-between gap-3 border-b border-line">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-11 h-11 shrink-0 rounded-xl bg-action-soft text-action flex items-center justify-center font-heading font-bold text-xl leading-none pt-1 overflow-hidden">
+              {gujarati ? Array.from(gujarati)[0] : 'સ'}
             </span>
-            <div>
-              <h3 className="font-bold text-base sm:text-lg leading-tight">
-                {title || (isEn ? 'ISL Sign Demonstration' : 'ISL સંકેત વિડીયો')}
-              </h3>
-              <p className="text-xs text-amber-300 font-medium">{english || category || 'Indian Sign Language'}</p>
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold leading-tight truncate">{heading}</h2>
+              <p className="text-sm text-ink-muted truncate">{english || category || 'Indian Sign Language'}</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={() => setActiveVideoModal(null)}
-            className="p-1.5 rounded-full bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition"
+            aria-label={isEn ? 'Close' : 'બંધ કરો'}
+            className="w-11 h-11 shrink-0 flex items-center justify-center rounded-xl border border-line hover:bg-canvas transition"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
-        {/* Video Simulation / Signer Display */}
-        <div className="relative bg-slate-950 flex flex-col items-center justify-center min-h-[220px] sm:min-h-[260px] p-4 text-center overflow-hidden">
-          {youtubeEmbedUrl ? (
-            <iframe
-              key={youtubeEmbedUrl}
-              src={youtubeEmbedUrl}
-              title={title || (isEn ? 'ISL Sign Demonstration' : 'ISL સંકેત વિડીયો')}
-              className="w-full max-w-[360px] h-[200px] sm:h-[240px] rounded-xl bg-black border-0 shadow-md"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
-          ) : isDirectVideo ? (
-            <video
-              ref={videoRef}
-              key={videoUrl}
-              src={videoUrl}
-              autoPlay
-              loop
-              muted
-              playsInline
-              controls
-              className="w-full max-w-[360px] max-h-[240px] rounded-xl bg-black"
-            />
-          ) : (
-            <div className="relative w-full max-w-[280px] h-[200px] bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl border border-slate-700 flex flex-col items-center justify-center p-4 shadow-inner">
-              <div className="relative flex items-center justify-center">
-                <div className="w-24 h-24 rounded-full bg-amber-500/20 border-2 border-dashed border-amber-400 flex items-center justify-center text-4xl animate-pulse">
-                  🤟
-                </div>
-                <div className="absolute -bottom-2 bg-slate-950/90 text-amber-300 text-[10px] px-2 py-0.5 rounded-full border border-amber-400/40 font-mono">
-                  {playbackRate}x {isEn ? 'Speed' : 'સ્પીડ'}
-                </div>
+        <div className="overflow-y-auto">
+          {/* Video: the largest element */}
+          <div className="bg-ink p-3 sm:p-4 flex flex-col items-center gap-3">
+            {youtubeEmbedUrl ? (
+              <iframe
+                key={youtubeEmbedUrl}
+                src={youtubeEmbedUrl}
+                title={heading}
+                className="w-full aspect-video rounded-2xl bg-black border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            ) : isDirectVideo ? (
+              <video
+                ref={videoRef}
+                key={videoUrl}
+                src={videoUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                controls
+                className="w-full aspect-video rounded-2xl bg-black"
+              />
+            ) : (
+              <div className="w-full aspect-video rounded-2xl bg-white/5 border border-white/15 flex flex-col items-center justify-center gap-3 p-4 text-center">
+                <Hand className="w-16 h-16 text-white" aria-hidden="true" />
+                <p className="font-heading text-xl font-bold text-white">
+                  {isEn ? `Sign for "${gujarati}"` : `"${gujarati}" નો સાઇન સંકેત`}
+                </p>
+                <p className="text-sm text-white/80">
+                  {isEn ? 'Video not recorded yet – follow the steps below' : 'વિડીયો હજુ ઉપલબ્ધ નથી – નીચેની વિગત અનુસરો'}
+                </p>
+              </div>
+            )}
+
+            {/* Controls */}
+            <div className="w-full flex flex-wrap items-center justify-between gap-2">
+              <div role="group" aria-label={isEn ? 'Speed' : 'સ્પીડ'} className="flex items-center gap-1 bg-white/10 p-1 rounded-xl">
+                <span className="text-sm text-white/80 px-2">{isEn ? 'Speed' : 'સ્પીડ'}</span>
+                {[0.5, 0.75, 1].map(rate => (
+                  <button
+                    key={rate}
+                    type="button"
+                    onClick={() => setPlaybackRate(rate)}
+                    aria-pressed={playbackRate === rate}
+                    className={`min-w-tap min-h-[40px] px-2 rounded-lg text-sm transition ${
+                      playbackRate === rate ? 'bg-white text-ink font-bold' : 'text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {rate}x
+                  </button>
+                ))}
               </div>
 
-              <p className="text-white font-bold text-lg mt-3">
-                {isEn ? `Sign for "${gujarati}"` : `"${gujarati}" નો સાઇન સંકેત`}
-              </p>
-              <p className="text-xs text-slate-300 mt-0.5">
-                {isEn ? 'Video not recorded yet – follow the steps below' : 'વિડીયો હજુ ઉપલબ્ધ નથી – નીચેની વિગત અનુસરો'}
-              </p>
+              <button
+                type="button"
+                onClick={handleSpeech}
+                className="inline-flex items-center gap-1.5 min-h-tap px-4 rounded-xl bg-white text-ink text-sm font-semibold hover:bg-canvas transition"
+              >
+                <Volume2 className="w-4 h-4" aria-hidden="true" />
+                {isEn ? 'Say it' : 'ઉચ્ચારણ'}
+              </button>
             </div>
-          )}
-
-          {/* Subtitles in Gujarati */}
-          <div className="mt-3 bg-black/70 px-3 py-1.5 rounded-lg border border-white/10 max-w-sm">
-            <p className="text-xs text-amber-200 font-medium">
-              "{signDescription}"
-            </p>
           </div>
 
-          {/* Controls Bar */}
-          <div className="w-full max-w-[360px] mt-3 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1 bg-black/60 p-1 rounded-md">
-              <span className="text-[10px] text-slate-400 pl-1">{isEn ? 'Speed:' : 'સ્પીડ:'}</span>
-              {[0.5, 0.75, 1].map(rate => (
-                <button
-                  key={rate}
-                  onClick={() => setPlaybackRate(rate)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition ${
-                    playbackRate === rate 
-                      ? 'bg-amber-500 text-white' 
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  {rate}x
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={handleSpeech}
-              className="flex items-center gap-1 bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-md text-[11px] font-medium transition"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>{isEn ? 'Audio' : 'ઉચ્ચારણ'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Sign Instructions & Details */}
-        <div className="p-4 overflow-y-auto space-y-3 text-slate-800">
-          <div>
-            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              {isEn ? 'Sign Instructions & Gestures' : 'સંકેત વિગત'}
-            </h4>
-            <p className="text-sm font-medium text-slate-800 mt-1 bg-amber-50/70 p-3 rounded-xl border border-amber-200">
-              {signDescription}
-            </p>
-            {handShape && <p className="text-xs text-slate-600 mt-1.5">✋ {handShape}</p>}
-          </div>
-
-          {meaning && (
+          {/* Sign Instructions & Details */}
+          <div className="p-4 space-y-4">
             <div>
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                {isEn ? 'Context & Meaning' : 'અર્થ અને સંદર્ભ'}
-              </h4>
-              <p className="text-xs text-slate-700 mt-1">{meaning}</p>
+              <h3 className="text-base font-bold flex items-center gap-1.5">
+                <Hand className="w-4 h-4 text-action" aria-hidden="true" />
+                {isEn ? 'How to sign it' : 'સંકેત વિગત'}
+              </h3>
+              <p className="mt-1 leading-relaxed">{signDescription}</p>
+              {handShape && <p className="text-sm text-ink-muted mt-1.5">{isEn ? 'Hand shape:' : 'હસ્તમુદ્રા:'} {handShape}</p>}
             </div>
-          )}
 
-          {/* Review status: only claim review when a reviewer is recorded */}
-          {verifiedBy ? (
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-xl text-xs">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{isEn ? `Reviewed by ${verifiedBy}` : `${verifiedBy} દ્વારા ચકાસાયેલ સંકેત.`}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 p-2.5 rounded-xl text-xs">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                {isEn
-                  ? 'Draft sign description – not yet reviewed by an ISL educator.'
-                  : 'ડ્રાફ્ટ વર્ણન – ISL શિક્ષક દ્વારા હજુ ચકાસાયેલ નથી.'}
-              </span>
-            </div>
-          )}
+            {meaning && (
+              <div>
+                <h3 className="text-base font-bold">{isEn ? 'Meaning' : 'અર્થ અને સંદર્ભ'}</h3>
+                <p className="text-sm text-ink-muted mt-1">{meaning}</p>
+              </div>
+            )}
+
+            {/* Review status: only claim review when a reviewer is recorded */}
+            {verifiedBy ? (
+              <div className="flex items-center gap-2 bg-success-soft text-success p-3 rounded-xl text-sm font-medium">
+                <ShieldCheck className="w-5 h-5 shrink-0" aria-hidden="true" />
+                <span>{isEn ? `Reviewed by ${verifiedBy}` : `${verifiedBy} દ્વારા ચકાસાયેલ સંકેત.`}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-canvas border border-line p-3 rounded-xl text-sm">
+                <AlertCircle className="w-5 h-5 shrink-0 text-action" aria-hidden="true" />
+                <span>
+                  {isEn
+                    ? 'Draft sign description – not yet reviewed by an ISL educator.'
+                    : 'ડ્રાફ્ટ વર્ણન – ISL શિક્ષક દ્વારા હજુ ચકાસાયેલ નથી.'}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <div className="p-3 border-t border-line">
           <button
+            type="button"
             onClick={() => setActiveVideoModal(null)}
-            className="w-full sm:w-auto px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+            className="w-full min-h-[52px] rounded-xl bg-action hover:bg-action-hover text-white text-base font-semibold transition"
           >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>{isEn ? 'Got it (Close)' : 'સમજાયું'}</span>
+            {isEn ? 'Got it' : 'સમજાયું'}
           </button>
         </div>
       </div>
