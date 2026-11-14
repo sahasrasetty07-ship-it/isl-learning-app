@@ -1,188 +1,162 @@
-import React from 'react';
+import { useState } from 'react';
+import clsx from 'clsx';
 import { useApp } from '../../context/AppContext';
-import { 
-  Volume2, 
-  VolumeX, 
-  Smartphone, 
-  Monitor, 
-  Sparkles, 
-  Flame, 
-  User, 
-  GraduationCap, 
-  Users, 
-  Globe
+import {
+  Volume2,
+  VolumeX,
+  UserCircle2,
+  GraduationCap,
+  Presentation,
+  Users,
+  Home,
+  Check,
+  ChevronDown
 } from 'lucide-react';
 
-export const Header = () => {
-  const { 
-    currentRole, 
-    setCurrentRole, 
-    uiLanguage,
-    setUiLanguage,
-    audioEnabled, 
-    setAudioEnabled, 
-    isMobileFrame, 
-    setIsMobileFrame, 
-    student 
-  } = useApp();
+export const ROLE_OPTIONS = [
+  { id: 'student', icon: GraduationCap, en: 'Student', gu: 'વિદ્યાર્થી' },
+  { id: 'teacher', icon: Presentation, en: 'Teacher', gu: 'શિક્ષક' },
+  { id: 'parent', icon: Users, en: 'Parent', gu: 'વાલી' }
+];
 
+export const Logo = ({ onClick, isEn }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="flex items-center gap-2.5 min-h-tap rounded-xl pr-2"
+    aria-label={isEn ? 'Saket home page' : 'સાકેત મુખ્ય પાનું'}
+  >
+    <span className="w-10 h-10 rounded-xl bg-action text-white flex items-center justify-center font-heading font-bold text-2xl leading-none pt-1" aria-hidden="true">
+      સ
+    </span>
+    <span className="text-left leading-tight">
+      <span className="block font-heading font-bold text-lg">Saket</span>
+      <span className="block text-xs text-ink-muted">સાકેત</span>
+    </span>
+  </button>
+);
+
+// English / ગુજરાતી switch backed by the existing uiLanguage setting
+export const LanguageSwitch = ({ uiLanguage, setUiLanguage }) => (
+  <div role="group" aria-label="Language / ભાષા" className="flex p-1 rounded-xl bg-canvas border border-line">
+    {[
+      { id: 'en', label: 'English', short: 'EN' },
+      { id: 'gu', label: 'ગુજરાતી', short: 'ગુ' }
+    ].map(l => {
+      const active = uiLanguage === l.id;
+      return (
+        <button
+          key={l.id}
+          type="button"
+          aria-pressed={active}
+          onClick={() => setUiLanguage(l.id)}
+          className={clsx(
+            'min-h-[36px] min-w-tap px-2.5 rounded-lg text-sm transition',
+            active ? 'bg-surface text-ink font-bold border border-line' : 'text-ink-muted font-medium hover:text-ink'
+          )}
+        >
+          <span className="sm:hidden">{l.short}</span>
+          <span className="hidden sm:inline">{l.label}</span>
+        </button>
+      );
+    })}
+  </div>
+);
+
+export const Header = ({ onShowLanding }) => {
+  const { currentRole, setCurrentRole, uiLanguage, setUiLanguage, audioEnabled, setAudioEnabled } = useApp();
   const isEn = uiLanguage === 'en';
-
-  const roleConfigs = [
-    { 
-      id: 'student', 
-      label: isEn ? 'Student' : 'વિદ્યાર્થી', 
-      icon: GraduationCap, 
-      activeGradient: 'from-amber-500 to-orange-500',
-      activeGlow: 'shadow-amber-500/20'
-    },
-    { 
-      id: 'teacher', 
-      label: isEn ? 'Teacher' : 'શિક્ષક', 
-      icon: User, 
-      activeGradient: 'from-blue-600 to-indigo-600',
-      activeGlow: 'shadow-blue-500/20'
-    },
-    { 
-      id: 'parent', 
-      label: isEn ? 'Parent' : 'વાલી', 
-      icon: Users, 
-      activeGradient: 'from-emerald-600 to-teal-600',
-      activeGlow: 'shadow-emerald-500/20'
-    },
-  ];
+  const [menuOpen, setMenuOpen] = useState(false);
+  const role = ROLE_OPTIONS.find(r => r.id === currentRole) || ROLE_OPTIONS[0];
 
   return (
-    <header className="bg-slate-950/80 backdrop-blur-2xl text-white px-3 sm:px-6 py-2.5 border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.3)] sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        {/* Brand & Title */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25 border border-amber-300/30 font-black text-xl text-white">
-              સ
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black tracking-tight text-white text-base sm:text-lg">
-                  Saket <span className="text-amber-400 font-medium text-sm sm:text-base">(સાકેત)</span>
-                </span>
-                <span className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-300 border border-amber-400/30 backdrop-blur-md">
-                  ISL • GUJARATI
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block tracking-wide">
-                {isEn 
-                  ? 'Gujarati Sign Language Learning & Inclusive Communication' 
-                  : 'ગુજરાતી સંકેત ભાષા શિક્ષણ અને સમાવેશી સંવાદ'}
-              </p>
-            </div>
-          </div>
+    <header className="sticky top-0 z-40 bg-surface border-b border-line">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2">
+        <Logo onClick={onShowLanding} isEn={isEn} />
 
-          {/* Quick stats & language on mobile */}
-          <div className="flex md:hidden items-center gap-1.5">
-            <button
-              onClick={() => setUiLanguage(isEn ? 'gu' : 'en')}
-              className="px-2 py-1 rounded-xl text-[11px] font-bold border border-white/10 bg-white/5 backdrop-blur-md text-slate-200 flex items-center gap-1 active:scale-95 transition"
-              title="Switch Language"
-            >
-              <Globe className="w-3 h-3 text-sky-400" />
-              <span>{isEn ? 'EN' : 'ગુ'}</span>
-            </button>
-            {currentRole === 'student' && (
-              <>
-                <div className="flex items-center gap-1 bg-amber-500/15 border border-amber-500/30 text-amber-300 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{student.totalStars}</span>
-                </div>
-                <div className="flex items-center gap-1 bg-orange-500/15 border border-orange-500/30 text-orange-400 px-2 py-1 rounded-full text-xs font-semibold backdrop-blur-md">
-                  <Flame className="w-3.5 h-3.5" />
-                  <span>{student.currentStreak}d</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <LanguageSwitch uiLanguage={uiLanguage} setUiLanguage={setUiLanguage} />
 
-        {/* Center / Role Selector Switcher */}
-        <div className="p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl flex items-center flex-wrap sm:flex-nowrap gap-1">
-          {roleConfigs.map(role => {
-            const Icon = role.icon;
-            const isActive = currentRole === role.id;
-            return (
-              <button
-                key={role.id}
-                onClick={() => setCurrentRole(role.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 whitespace-nowrap ${
-                  isActive 
-                    ? `bg-gradient-to-r ${role.activeGradient} text-white shadow-lg ${role.activeGlow} border border-white/25 scale-[1.02]` 
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{role.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right utility buttons: Language toggle, Sound toggle, View toggle */}
-        <div className="hidden md:flex items-center gap-2">
-          {currentRole === 'student' && (
-            <div className="flex items-center gap-2 mr-1">
-              <div className="flex items-center gap-1.5 bg-amber-500/15 border border-amber-400/25 text-amber-300 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md shadow-sm">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>{student.totalStars} {isEn ? 'Stars' : 'તારા'}</span>
-              </div>
-              <div className="flex items-center gap-1.5 bg-orange-500/15 border border-orange-400/25 text-orange-400 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md shadow-sm">
-                <Flame className="w-3.5 h-3.5" />
-                <span>{student.currentStreak} {isEn ? 'Day Streak' : 'દિન'}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Language Switcher Button (EN / GU) */}
+          {/* Audio is an optional aid: the label says the state, not only the icon */}
           <button
-            onClick={() => setUiLanguage(isEn ? 'gu' : 'en')}
-            className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 backdrop-blur-md transition-all flex items-center gap-1.5 shadow-sm"
-            title="Switch UI Language / ભાષા બદલો"
-          >
-            <Globe className="w-3.5 h-3.5 text-sky-400" />
-            <span>{isEn ? 'EN' : 'ગુજરાતી'}</span>
-            <span className="text-[10px] text-slate-400">({isEn ? 'English' : 'GU'})</span>
-          </button>
-
-          {/* Audio speech toggle */}
-          <button
+            type="button"
             onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 backdrop-blur-md ${
-              audioEnabled 
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30 hover:bg-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.2)]' 
-                : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-white'
-            }`}
-            title={audioEnabled ? "Speech audio is ON (click to mute)" : "Speech audio is MUTED (click to enable)"}
+            aria-pressed={audioEnabled}
+            title={audioEnabled ? (isEn ? 'Audio on' : 'અવાજ ચાલુ') : (isEn ? 'Audio off' : 'અવાજ બંધ')}
+            className="inline-flex items-center gap-1.5 min-h-tap min-w-tap justify-center px-2.5 rounded-xl border border-line bg-surface hover:bg-canvas text-sm font-semibold transition"
           >
-            {audioEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
-            <span className="text-[11px]">{audioEnabled ? (isEn ? 'Audio On' : 'અવાજ ચાલુ') : (isEn ? 'Muted' : 'અવાજ બંધ')}</span>
+            {audioEnabled ? <Volume2 className="w-5 h-5" aria-hidden="true" /> : <VolumeX className="w-5 h-5" aria-hidden="true" />}
+            <span className="hidden md:inline">
+              {audioEnabled ? (isEn ? 'Audio on' : 'અવાજ ચાલુ') : (isEn ? 'Audio off' : 'અવાજ બંધ')}
+            </span>
+            <span className="sr-only md:hidden">
+              {audioEnabled ? (isEn ? 'Audio on' : 'અવાજ ચાલુ') : (isEn ? 'Audio off' : 'અવાજ બંધ')}
+            </span>
           </button>
 
-          {/* Mobile frame vs Full responsive toggle */}
-          <button
-            onClick={() => setIsMobileFrame(!isMobileFrame)}
-            className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10 hover:text-white transition-all backdrop-blur-md flex items-center gap-1.5 shadow-sm"
-            title="Switch between Mobile Phone Frame and Full Screen"
-          >
-            {isMobileFrame ? (
+          {/* Profile menu holds the role switch */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(o => !o)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className="inline-flex items-center gap-1.5 min-h-tap px-2.5 rounded-xl border border-line bg-surface hover:bg-canvas text-sm font-semibold transition"
+            >
+              <UserCircle2 className="w-5 h-5" aria-hidden="true" />
+              <span className="hidden sm:inline">{isEn ? role.en : role.gu}</span>
+              <span className="sr-only sm:hidden">{isEn ? `Profile: ${role.en}` : `પ્રોફાઇલ: ${role.gu}`}</span>
+              <ChevronDown className="w-4 h-4 text-ink-muted" aria-hidden="true" />
+            </button>
+
+            {menuOpen && (
               <>
-                <Monitor className="w-4 h-4 text-sky-400" />
-                <span className="text-[11px]">{isEn ? 'Full Screen' : 'ફુલ સ્ક્રીન'}</span>
-              </>
-            ) : (
-              <>
-                <Smartphone className="w-4 h-4 text-amber-400" />
-                <span className="text-[11px]">{isEn ? 'Phone Frame' : 'મોબાઇલ ફ્રેમ'}</span>
+                {/* Click outside closes the menu */}
+                <button
+                  type="button"
+                  aria-label={isEn ? 'Close menu' : 'મેનુ બંધ કરો'}
+                  className="fixed inset-0 z-40 cursor-default"
+                  onClick={() => setMenuOpen(false)}
+                  tabIndex={-1}
+                />
+                <div role="menu" className="absolute right-0 mt-2 w-64 z-50 bg-surface border border-line rounded-2xl p-2">
+                  <p className="px-3 pt-1 pb-2 text-xs font-semibold text-ink-muted">
+                    {isEn ? 'View the app as' : 'એપ આ રીતે જુઓ'}
+                  </p>
+                  {ROLE_OPTIONS.map(r => {
+                    const active = r.id === currentRole;
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        onClick={() => { setCurrentRole(r.id); setMenuOpen(false); }}
+                        className={clsx(
+                          'w-full flex items-center gap-3 min-h-tap px-3 rounded-xl text-sm text-left transition',
+                          active ? 'bg-action-soft font-bold' : 'font-medium hover:bg-canvas'
+                        )}
+                      >
+                        <r.icon className="w-5 h-5 text-ink-muted" aria-hidden="true" />
+                        <span className="flex-1">{isEn ? r.en : r.gu}</span>
+                        {active && <Check className="w-4 h-4 text-action" aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                  <div className="my-2 border-t border-line" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setMenuOpen(false); onShowLanding(); }}
+                    className="w-full flex items-center gap-3 min-h-tap px-3 rounded-xl text-sm font-medium text-left hover:bg-canvas transition"
+                  >
+                    <Home className="w-5 h-5 text-ink-muted" aria-hidden="true" />
+                    {isEn ? 'Saket home page' : 'સાકેત મુખ્ય પાનું'}
+                  </button>
+                </div>
               </>
             )}
-          </button>
+          </div>
         </div>
       </div>
     </header>
