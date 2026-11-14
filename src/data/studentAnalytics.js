@@ -9,6 +9,13 @@ export const initialStudentData = {
   totalStars: 142,
   currentStreak: 6, // days
   activityDates: [], // YYYY-MM-DD list of active learning dates
+  // Handwriting pad: every verified attempt, newest first
+  // { id, subject, character, score, error, attempt, mode, passed, stars, at (ISO time) }
+  writingAttempts: [],
+  // Stars already earned per character ('subject:character' -> stars), so repeat practice doesn't re-award
+  writingStars: {},
+  // Lesson clips watched per item ('letter:ka' -> { sign, write, say })
+  lessonClips: {},
   weeklyHours: 4.5,
   subjects: {
     gujarati: {

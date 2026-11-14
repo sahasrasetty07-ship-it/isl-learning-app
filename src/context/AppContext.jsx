@@ -1,8 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { initialStudentData, classStudents } from '../data/studentAnalytics';
+import { isClipItemComplete } from '../data/lessonClips';
 
 const AppContext = createContext();
 const STUDENT_KEY = 'gsl-student-v1';
+const SETTINGS_KEY = 'gsl-settings-v1';
+export const DEFAULT_WRITING_THRESHOLD = 85;
 
 // Returns the current local calendar date formatted as YYYY-MM-DD (timezone-safe)
 export const getLocalDateString = (d = new Date()) => {
@@ -88,7 +91,10 @@ export const AppProvider = ({ children }) => {
   const [student, setStudent] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(STUDENT_KEY));
-      const baseData = (stored && typeof stored === 'object') ? stored : initialStudentData;
+      // Merge over defaults so data saved by an older version still has every field.
+      const baseData = (stored && typeof stored === 'object')
+        ? { ...initialStudentData, ...stored, subjects: { ...initialStudentData.subjects, ...stored.subjects } }
+        : initialStudentData;
 
       const activityDates = Array.isArray(baseData.activityDates)
         ? baseData.activityDates
@@ -112,6 +118,19 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem(STUDENT_KEY, JSON.stringify(student));
   }, [student]);
+
+  // Teacher setting: handwriting pass mark (0–100). Higher is stricter.
+  const [writingThreshold, setWritingThreshold] = useState(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(SETTINGS_KEY))?.writingThreshold;
+      return Number.isFinite(v) ? v : DEFAULT_WRITING_THRESHOLD;
+    } catch {
+      return DEFAULT_WRITING_THRESHOLD;
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ writingThreshold }));
+  }, [writingThreshold]);
 
   // Assignment = a set of `count` exercises of one type: { subjectKey, exerciseType, count, title, ... }.
   // exerciseType: math op id or 'mixed', science lesson id, or 'writing' for Gujarati letters.
@@ -140,9 +159,12 @@ export const AppProvider = ({ children }) => {
   // Active notification toast
   const [toastMessage, setToastMessage] = useState(null);
 
+  const toastTimerRef = useRef(null);
   const showToast = (message, type = 'success') => {
     setToastMessage({ message, type });
-    setTimeout(() => setToastMessage(null), 3500);
+    // Reset the timer so an older toast's timeout can't hide a newer one early
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
   };
 
   // Text to speech helper for Gujarati
@@ -160,7 +182,8 @@ export const AppProvider = ({ children }) => {
   };
 
   // Record every exercise attempt; accuracy = correct / attempted.
-  const recordExerciseAttempt = (subjectKey, isCorrect, topicName = '', points = 10, exerciseType = null) => {
+  // options.silent: skip the generic toast (for screens that show their own feedback)
+  const recordExerciseAttempt = (subjectKey, isCorrect, topicName = '', points = 10, exerciseType = null, options = {}) => {
     setStudent(prev => {
       const currentSubject = prev.subjects[subjectKey] || {};
       const attempted = (currentSubject.attempted || 0) + 1;
@@ -217,13 +240,56 @@ export const AppProvider = ({ children }) => {
         })
       };
     });
-    if (isCorrect) {
+    if (isCorrect && !options.silent) {
       showToast(uiLanguage === 'en' ? `Well done! +${points} stars earned! ⭐` : `ખૂબ સરસ! +${points} તારા મળ્યા! ⭐`);
     }
   };
 
   const recordExerciseSuccess = (subjectKey, points = 10, topicName = '', exerciseType = null) =>
     recordExerciseAttempt(subjectKey, true, topicName, points, exerciseType);
+
+  // Record one verified handwriting attempt and award stars:
+  // 3 on the first attempt at a character, 2 on the second, 1 after that,
+  // nothing on a failed attempt or once the character has already earned stars.
+  const recordWritingAttempt = ({ subject, character, score, error, passed, mode }) => {
+    const key = `${subject}:${character}`;
+    const attempts = student.writingAttempts || [];
+    const attemptNumber = attempts.filter(a => a.subject === subject && a.character === character).length + 1;
+    const alreadyEarned = Boolean(student.writingStars?.[key]);
+    const stars = passed && !alreadyEarned ? (attemptNumber === 1 ? 3 : attemptNumber === 2 ? 2 : 1) : 0;
+
+    const entry = {
+      id: `wr-${Date.now()}`,
+      subject, character, score, error, mode, passed, stars,
+      attempt: attemptNumber,
+      at: new Date().toISOString()
+    };
+    setStudent(prev => ({
+      ...prev,
+      writingAttempts: [entry, ...(prev.writingAttempts || [])].slice(0, 300),
+      writingStars: stars > 0 ? { ...prev.writingStars, [key]: stars } : prev.writingStars
+    }));
+    // Feeds subject accuracy, the star total, streak and assignment progress
+    recordExerciseAttempt(subject, passed, `Writing '${character}' · ${score}%`, stars, 'writing', { silent: true });
+    return { stars, attemptNumber, alreadyEarned };
+  };
+
+  // Mark one clip ('sign' | 'write' | 'say') of a lesson item as watched.
+  // When that completes the item's videos, it adds a point of lesson progress.
+  const markClipWatched = (item, clip) => setStudent(prev => {
+    const before = prev.lessonClips?.[item.key] || {};
+    if (before[clip]) return prev;
+    const after = { ...before, [clip]: true };
+    const subject = prev.subjects[item.subject];
+    const completes = subject && !isClipItemComplete(item, before) && isClipItemComplete(item, after);
+    return {
+      ...prev,
+      lessonClips: { ...prev.lessonClips, [item.key]: after },
+      subjects: completes
+        ? { ...prev.subjects, [item.subject]: { ...subject, progress: Math.min(100, (subject.progress || 0) + 1) } }
+        : prev.subjects
+    };
+  });
 
   return (
     <AppContext.Provider
@@ -249,6 +315,10 @@ export const AppProvider = ({ children }) => {
         speakText,
         recordExerciseSuccess,
         recordExerciseAttempt,
+        recordWritingAttempt,
+        markClipWatched,
+        writingThreshold,
+        setWritingThreshold,
         addAssignment,
         activeAssignment,
         startAssignment,
