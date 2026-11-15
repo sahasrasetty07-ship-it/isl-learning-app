@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { computeReportStats, STATUS_LABELS, STATUS_THRESHOLDS } from '../../lib/reportStats';
+import { MyCodeCard } from '../linking/MyCodeCard';
+import { LinkedPeople } from '../linking/LinkedPeople';
 import { Button, SUBJECT_STYLES } from '../ui';
 import {
   Star,
@@ -64,14 +66,18 @@ const formatWhen = (iso, isEn) => {
   });
 };
 
-export const ReportCard = () => {
-  const { student, setActiveTab, showToast, uiLanguage } = useApp();
-  const { profile } = useAuth();
-  const isEn = uiLanguage === 'en';
+// Presentational report: takes the student's data as props so the parent and
+// teacher screens can render the same layout for a linked student.
+export const StudentReportView = ({
+  student,
+  profile = {},
+  isEn = true,
+  onPractice = null,
+  showToast = null,
+  now = new Date()
+}) => {
   const [range, setRange] = useState('all');
   const [expanded, setExpanded] = useState({});
-
-  const now = new Date();
   const days = range === 'week' ? 7 : null;
   const stats = computeReportStats(student, profile, now, { days });
 
@@ -81,7 +87,7 @@ export const ReportCard = () => {
   // Print is the only export path; the PDF button opens the same dialog.
   const handlePrint = () => window.print();
   const handleSavePdf = () => {
-    showToast(
+    showToast?.(
       isEn
         ? 'Choose “Save as PDF” as the printer in the print dialog.'
         : 'પ્રિન્ટ વિન્ડોમાં પ્રિન્ટર તરીકે “Save as PDF” પસંદ કરો.',
@@ -192,9 +198,11 @@ export const ReportCard = () => {
               ? 'Complete a lesson, a writing-pad practice or a quiz and the numbers will appear here.'
               : 'પાઠ પૂરો કરો, લેખન પેડ પર મહાવરો કરો કે ક્વિઝ આપો — પછી આંકડા અહીં દેખાશે.'}
           </p>
-          <Button onClick={() => setActiveTab('gujarati')} className="print-hide">
-            {isEn ? 'Start a lesson' : 'પાઠ શરૂ કરો'}
-          </Button>
+          {onPractice && (
+            <Button onClick={() => onPractice('gujarati')} className="print-hide">
+              {isEn ? 'Start a lesson' : 'પાઠ શરૂ કરો'}
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -216,13 +224,15 @@ export const ReportCard = () => {
                         {' · '}{t.accuracy}%
                       </p>
                     </div>
-                    <Button
-                      variant="secondary"
-                      onClick={() => setActiveTab(t.subjectKey)}
-                      className="shrink-0 min-h-[36px] px-3 text-xs print-hide"
-                    >
-                      {isEn ? 'Practice' : 'મહાવરો'}
-                    </Button>
+                    {onPractice && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => onPractice(t.subjectKey)}
+                        className="shrink-0 min-h-[36px] px-3 text-xs print-hide"
+                      >
+                        {isEn ? 'Practice' : 'મહાવરો'}
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -374,6 +384,32 @@ export const ReportCard = () => {
             </p>
           )}
         </>
+      )}
+    </div>
+  );
+};
+
+// Routed student screen: feeds the signed-in student's live state into the view.
+export const ReportCard = () => {
+  const { student, setActiveTab, showToast, uiLanguage } = useApp();
+  const { profile, isConfigured } = useAuth();
+  const isEn = uiLanguage === 'en';
+  return (
+    <div className="space-y-6">
+      <StudentReportView
+        student={student}
+        profile={profile}
+        isEn={isEn}
+        onPractice={setActiveTab}
+        showToast={showToast}
+      />
+
+      {/* Linking lives here, so a parent/teacher report never shows the code */}
+      {isConfigured && profile?.role === 'student' && (
+        <div className="mx-auto max-w-[880px] space-y-4 print-hide">
+          <MyCodeCard isEn={isEn} showToast={showToast} />
+          <LinkedPeople isEn={isEn} />
+        </div>
       )}
     </div>
   );
