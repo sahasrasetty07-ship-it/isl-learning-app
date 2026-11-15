@@ -1,14 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { TextToSign } from './TextToSign';
 import { SignRecognition } from './SignRecognition';
 import { SpeechToSign } from './SpeechToSign';
-import { VoiceTools } from './VoiceTools';
 import { 
-  FileText, 
   Mic, 
   Camera, 
-  Volume2, 
   Sparkles,
   ShieldCheck,
   Clock
@@ -17,18 +13,12 @@ import {
 export const TranslatorHub = () => {
   const { uiLanguage } = useApp();
   const isEn = uiLanguage === 'en';
-  const [activeTab, setActiveTab] = useState('text-to-sign');
+  const [activeTab, setActiveTab] = useState('speech-to-sign');
 
   const tabs = [
     {
-      id: 'text-to-sign',
-      label: isEn ? 'Text → Sign' : 'ટેક્સ્ટ → સાઇન',
-      sub: isEn ? 'Convert words & articles' : 'શબ્દો અને લેખોનું રૂપાંતર',
-      icon: FileText,
-    },
-    {
       id: 'speech-to-sign',
-      label: isEn ? 'Speech → Sign' : 'વાણી → સાઇન',
+      label: isEn ? 'Speech → Text' : 'વાણી → ટેક્સ્ટ',
       sub: isEn ? 'Spoken voice to ISL' : 'ગુજરાતી બોલીમાંથી સંકેત',
       icon: Mic,
     },
@@ -37,12 +27,6 @@ export const TranslatorHub = () => {
       label: isEn ? 'Sign → Text/Speech' : 'સાઇન → ટેક્સ્ટ/વાણી',
       sub: isEn ? 'Camera recognition practice' : 'કેમેરા સંકેત મહાવરો',
       icon: Camera,
-    },
-    {
-      id: 'voice-tools',
-      label: isEn ? 'Voice Tools' : 'વાણી સાધનો',
-      sub: isEn ? 'Pronunciation & clarity' : 'ઉચ્ચાર અને વાણી સહાય',
-      icon: Volume2,
     },
   ];
 
@@ -71,7 +55,7 @@ export const TranslatorHub = () => {
 
       {/* Tab Switcher */}
       <div
-        className="grid grid-cols-2 md:grid-cols-4 gap-1.5 bg-slate-200/80 p-1.5 rounded-2xl"
+        className="grid grid-cols-2 gap-1.5 bg-slate-200/80 p-1.5 rounded-2xl"
         role="tablist"
         aria-label={isEn ? 'Translation Modes' : 'અનુવાદ મોડ'}
       >
@@ -104,10 +88,8 @@ export const TranslatorHub = () => {
 
       {/* Tab Content Views */}
       <div role="tabpanel" className="mt-2">
-        {activeTab === 'text-to-sign' && <TextToSign />}
         {activeTab === 'speech-to-sign' && <SpeechToSign />}
         {activeTab === 'sign-to-text' && <SignRecognition />}
-        {activeTab === 'voice-tools' && <VoiceTools />}
       </div>
     </div>
   );

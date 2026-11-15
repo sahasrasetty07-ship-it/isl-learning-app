@@ -1,150 +1,380 @@
+import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { WritingAttemptsPanel } from '../common/WritingAttemptsPanel';
-import { LessonVideoProgress } from '../common/LessonVideoProgress';
-import { PageHeader, Card, CardTitle, Button, SUBJECT_STYLES } from '../ui';
+import { useAuth } from '../../context/AuthContext';
+import { computeReportStats, STATUS_LABELS, STATUS_THRESHOLDS } from '../../lib/reportStats';
+import { Button, SUBJECT_STYLES } from '../ui';
 import {
   Star,
-  MessageSquareText,
-  Download,
+  Flame,
+  Clock,
   Printer,
-  BarChart3,
-  History
+  FileDown,
+  BookOpen,
+  ChevronDown,
+  AlertCircle,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 
-export const ReportCard = () => {
-  const { student, showToast, uiLanguage } = useApp();
-  const isEn = uiLanguage === 'en';
+// One place for every colour used for a status. Text always sits next to the
+// dot, so status is never communicated by colour alone.
+const STATUS_STYLES = {
+  mastered: { chip: 'border-success/40 bg-success-soft text-success', dot: 'bg-success' },
+  'in-progress': { chip: 'border-line bg-canvas text-ink', dot: 'bg-ink-muted' },
+  'needs-practice': { chip: 'border-action/40 bg-action-soft text-action', dot: 'bg-action' },
+  'not-started': { chip: 'border-line bg-canvas text-ink-muted', dot: 'bg-ink-subtle' }
+};
 
-  const handlePrint = () => {
+const StatusChip = ({ status, isEn }) => {
+  const s = STATUS_STYLES[status] || STATUS_STYLES['not-started'];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ${s.chip}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} aria-hidden="true" />
+      {isEn ? STATUS_LABELS[status].en : STATUS_LABELS[status].gu}
+    </span>
+  );
+};
+
+const Metric = ({ label, value, note, icon: Icon }) => (
+  <div className="rounded-xl border border-line bg-surface p-4 print-avoid-break">
+    <dt className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+      {Icon && <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />}
+      {label}
+    </dt>
+    <dd className="mt-1 font-heading text-3xl font-bold leading-none tabular-nums">{value}</dd>
+    {note && <p className="mt-1.5 text-xs text-ink-muted">{note}</p>}
+  </div>
+);
+
+const minutesLabel = (minutes, isEn) => {
+  if (minutes < 60) return `${minutes} ${isEn ? 'min' : 'મિનિટ'}`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return isEn ? `${h} h ${m} min` : `${h} કલાક ${m} મિનિટ`;
+};
+
+const formatWhen = (iso, isEn) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(isEn ? 'en-IN' : 'gu-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+export const ReportCard = () => {
+  const { student, setActiveTab, showToast, uiLanguage } = useApp();
+  const { profile } = useAuth();
+  const isEn = uiLanguage === 'en';
+  const [range, setRange] = useState('all');
+  const [expanded, setExpanded] = useState({});
+
+  const now = new Date();
+  const days = range === 'week' ? 7 : null;
+  const stats = computeReportStats(student, profile, now, { days });
+
+  const displayName = stats.studentName || (isEn ? 'Student' : 'વિદ્યાર્થી');
+  const profileLine = [stats.grade, stats.school].filter(Boolean).join(' · ');
+
+  // Print is the only export path; the PDF button opens the same dialog.
+  const handlePrint = () => window.print();
+  const handleSavePdf = () => {
+    showToast(
+      isEn
+        ? 'Choose “Save as PDF” as the printer in the print dialog.'
+        : 'પ્રિન્ટ વિન્ડોમાં પ્રિન્ટર તરીકે “Save as PDF” પસંદ કરો.',
+      'info'
+    );
     window.print();
   };
 
-  const handleDownload = () => {
-    showToast(isEn ? 'Student Report Card PDF downloaded successfully!' : 'પ્રગતિ પત્રક (Report Card) PDF સફળતાપૂર્વક ડાઉનલોડ થયું!');
-  };
-
-  // Per-subject display text; thresholds are the ones the report has always used
-  const subjectCards = [
-    { key: 'gujarati', en: 'Gujarati Alphabets, Words & Handwriting', enStatus: t => (t.mastery >= 90 ? 'Mastered' : 'In Progress') },
-    { key: 'math', en: 'Mathematics & Gujarati Tables', enStatus: t => (t.mastery >= 85 ? 'Mastered' : 'Needs Practice') },
-    { key: 'science', en: 'General Science with ISL Videos', enStatus: t => (t.mastery >= 80 ? 'Mastered' : 'New Topic') }
-  ];
-
-  const tiles = [
-    { label: isEn ? 'Overall progress' : 'કુલ સિદ્ધિ દર', value: `${student.overallProgress}%` },
-    { label: isEn ? 'Stars' : 'તારા', value: student.totalStars, star: true },
-    { label: isEn ? 'Streak' : 'સતત અભ્યાસ', value: `${student.currentStreak} ${isEn ? 'days' : 'દિવસ'}` },
-    { label: isEn ? 'This week' : 'આ અઠવાડિયે', value: `${student.weeklyHours} ${isEn ? 'hours' : 'કલાક'}` }
-  ];
+  if (!student) {
+    return (
+      <div className="rounded-xl border border-line bg-surface p-6" role="alert">
+        <p className="font-semibold">{isEn ? 'Report unavailable' : 'પ્રગતિ પત્રક ઉપલબ્ધ નથી'}</p>
+        <p className="text-sm text-ink-muted mt-1">
+          {isEn ? 'Reload the page to try again.' : 'ફરી પ્રયત્ન કરવા પૃષ્ઠ ફરી લોડ કરો.'}
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        icon={BarChart3}
-        title={isEn ? 'Report' : 'પ્રગતિ પત્રક'}
-        subtitle={`${student.name} · ${student.grade}`}
-        actions={
-          <>
-            <Button variant="secondary" onClick={handlePrint}>
-              <Printer className="w-4 h-4" aria-hidden="true" />
-              {isEn ? 'Print' : 'પ્રિન્ટ'}
-            </Button>
-            <Button onClick={handleDownload}>
-              <Download className="w-4 h-4" aria-hidden="true" />
-              {isEn ? 'Download PDF' : 'PDF ડાઉનલોડ'}
-            </Button>
-          </>
-        }
-      />
-      <p className="text-sm text-ink-muted -mt-2">{student.school}</p>
+    <div className="mx-auto max-w-[880px] space-y-6 print:max-w-none">
+      {/* Header */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            {isEn ? 'Progress report' : 'પ્રગતિ પત્રક'}
+          </p>
+          <h1 className="text-2xl sm:text-3xl font-bold leading-tight break-words" lang={/[\u0A80-\u0AFF]/.test(displayName) ? 'gu' : undefined}>
+            {displayName}
+          </h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            {profileLine || (isEn ? 'Generated from saved activity' : 'સાચવેલી પ્રવૃત્તિ પરથી બનેલું')}
+            {' · '}
+            {now.toLocaleDateString(isEn ? 'en-IN' : 'gu-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </p>
+        </div>
 
-      {/* Summary */}
-      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {tiles.map(t => (
-          <div key={t.label} className="bg-surface border border-line rounded-2xl p-4">
-            <dt className="text-sm text-ink-muted">{t.label}</dt>
-            <dd className="font-heading text-3xl font-bold tabular-nums flex items-center gap-1.5">
-              {t.value}
-              {t.star && <Star className="w-5 h-5 fill-action text-action" aria-hidden="true" />}
-            </dd>
+        <div className="flex flex-wrap items-center gap-2 print-hide">
+          <div className="flex rounded-xl border border-line bg-surface p-1" role="group" aria-label={isEn ? 'Date range' : 'સમયગાળો'}>
+            {[
+              { id: 'all', label: isEn ? 'All time' : 'આજ સુધી' },
+              { id: 'week', label: isEn ? 'Last 7 days' : 'છેલ્લા ૭ દિવસ' }
+            ].map(opt => (
+              <button
+                key={opt.id}
+                type="button"
+                aria-pressed={range === opt.id}
+                onClick={() => setRange(opt.id)}
+                className={`min-h-[36px] px-3 rounded-lg text-xs font-semibold transition ${
+                  range === opt.id ? 'bg-canvas text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
-        ))}
+          <Button variant="secondary" onClick={handlePrint}>
+            <Printer className="w-4 h-4" aria-hidden="true" />
+            {isEn ? 'Print' : 'પ્રિન્ટ'}
+          </Button>
+          <Button onClick={handleSavePdf}>
+            <FileDown className="w-4 h-4" aria-hidden="true" />
+            {isEn ? 'Print / Save as PDF' : 'પ્રિન્ટ / PDF સાચવો'}
+          </Button>
+        </div>
+      </header>
+
+      {/* KPI row — every value is computed from saved activity */}
+      <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Metric
+          label={isEn ? 'Overall progress' : 'કુલ પ્રગતિ'}
+          value={`${stats.overallProgress}%`}
+          note={
+            stats.hasActivity
+              ? isEn
+                ? `${stats.totalLessonsCompleted} of ${stats.totalLessons} lessons`
+                : `${stats.totalLessons} માંથી ${stats.totalLessonsCompleted} પાઠ`
+              : isEn ? 'No lessons yet' : 'હજુ કોઈ પાઠ નહીં'
+          }
+        />
+        <Metric
+          label={isEn ? 'Stars' : 'તારા'}
+          value={stats.stars}
+          note={isEn ? 'All time' : 'આજ સુધી'}
+          icon={Star}
+        />
+        <Metric
+          label={isEn ? 'Streak' : 'સતત અભ્યાસ'}
+          value={`${stats.streakDays}`}
+          note={isEn ? (stats.streakDays === 1 ? 'day' : 'days') : 'દિવસ'}
+          icon={Flame}
+        />
+        <Metric
+          label={isEn ? 'This week' : 'આ અઠવાડિયે'}
+          value={stats.hasActivity ? minutesLabel(stats.weeklyMinutes, isEn) : '—'}
+          note={isEn ? 'Tracked study time' : 'નોંધાયેલો અભ્યાસ સમય'}
+          icon={Clock}
+        />
       </dl>
 
-      {/* Subject mastery */}
-      <section className="space-y-3" aria-labelledby="subject-mastery">
-        <h2 id="subject-mastery" className="text-xl font-bold">{isEn ? 'Subjects' : 'વિષયવાર ગુણવત્તા અને ચોકસાઈ'}</h2>
-        {subjectCards.map(c => {
-          const subj = student.subjects[c.key];
-          const st = SUBJECT_STYLES[c.key];
-          return (
-            <Card key={c.key} className="space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0">
-                  <span className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center ${st.soft} ${st.text}`}>
-                    <st.icon className="w-5 h-5" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-bold leading-tight">{isEn ? c.en : subj.name}</h3>
-                    <p className="text-sm text-ink-muted">
-                      {subj.completedLessons} / {subj.totalLessons} {isEn ? 'lessons completed' : 'પ્રકરણ પૂર્ણ'}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className={`font-heading text-2xl font-bold ${st.text}`}>{subj.accuracy}%</p>
-                  <p className="text-xs text-ink-muted">{isEn ? 'Accuracy' : 'ચોકસાઈ દર'}</p>
-                </div>
-              </div>
-
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {subj.topics.map((t, idx) => (
-                  <li key={idx} className="p-3 rounded-xl bg-canvas border border-line">
-                    <p className="text-sm font-semibold">{t.name}</p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <div className="flex-1 h-2 rounded-full bg-line overflow-hidden">
-                        <div className={`h-full rounded-full ${st.bg}`} style={{ width: `${t.mastery}%` }} />
-                      </div>
-                      <span className="text-sm font-bold tabular-nums">{t.mastery}%</span>
+      {!stats.hasActivity ? (
+        /* Empty state: nothing has been recorded, so nothing is invented */
+        <div className="rounded-xl border border-line bg-surface p-8 text-center space-y-3 print-avoid-break">
+          <BookOpen className="w-8 h-8 mx-auto text-ink-muted" aria-hidden="true" />
+          <h2 className="text-lg font-bold">{isEn ? 'No activity yet' : 'હજુ કોઈ પ્રવૃત્તિ નથી'}</h2>
+          <p className="text-sm text-ink-muted max-w-sm mx-auto">
+            {isEn
+              ? 'Complete a lesson, a writing-pad practice or a quiz and the numbers will appear here.'
+              : 'પાઠ પૂરો કરો, લેખન પેડ પર મહાવરો કરો કે ક્વિઝ આપો — પછી આંકડા અહીં દેખાશે.'}
+          </p>
+          <Button onClick={() => setActiveTab('gujarati')} className="print-hide">
+            {isEn ? 'Start a lesson' : 'પાઠ શરૂ કરો'}
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Needs attention: the weakest practised topics only */}
+          {stats.needsAttention.length > 0 && (
+            <section className="rounded-xl border border-line bg-surface p-4 sm:p-5 space-y-2 print-avoid-break" aria-labelledby="attention-heading">
+              <h2 id="attention-heading" className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                {isEn ? 'Needs attention' : 'ધ્યાન આપવા જેવા વિષયો'}
+              </h2>
+              <ul className="divide-y divide-line">
+                {stats.needsAttention.map(t => (
+                  <li key={`${t.subjectKey}:${t.id}`} className="flex items-center gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold leading-tight" lang="gu">{t.name}</p>
+                      <p className="text-xs text-ink-muted mt-0.5">
+                        {isEn ? SUBJECT_STYLES[t.subjectKey].en : SUBJECT_STYLES[t.subjectKey].gu}
+                        {' · '}
+                        {isEn ? `${t.correct} of ${t.attempted} correct` : `${t.attempted} માંથી ${t.correct} સાચા`}
+                        {' · '}{t.accuracy}%
+                      </p>
                     </div>
-                    <p className="text-xs text-ink-muted mt-1">{isEn ? c.enStatus(t) : t.status}</p>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setActiveTab(t.subjectKey)}
+                      className="shrink-0 min-h-[36px] px-3 text-xs print-hide"
+                    >
+                      {isEn ? 'Practice' : 'મહાવરો'}
+                    </Button>
                   </li>
                 ))}
               </ul>
-            </Card>
-          );
-        })}
-      </section>
+            </section>
+          )}
 
-      {/* Teacher Recommendations */}
-      <Card className="space-y-2 border-action">
-        <CardTitle icon={MessageSquareText} iconClass="text-action" title={isEn ? "Teacher's recommendation" : 'શિક્ષકની ભલામણ અને સુધારણા માર્ગદર્શન'} />
-        <p className="leading-relaxed">
-          {isEn 
-            ? 'Aarav exhibits exceptional handwriting skills in Gujarati alphabets and strong grasp of Solar System signs. In Mathematics, additional practice in Subtraction and Division is recommended. Parents are advised to spend 10 minutes daily on the Subtraction Writing Pad exercises.' 
-            : 'આરવ ગુજરાતી મૂળાક્ષરો અને સૂર્યમંડળના સાઇન સંકેતોમાં ખૂબ જ કુશળ છે. ગણિતમાં બાદબાકી અને ભાગાકાર માં થોડા વધુ મહાવરાની જરૂર છે. આગામી અઠવાડિયે દરરોજ ૧૦ મિનિટ બાદબાકી પેડ પ્રેક્ટિસ કરવા ભલામણ છે.'}
-        </p>
-      </Card>
+          {/* Subjects: compact rows, expandable to the topic list */}
+          <section className="space-y-3" aria-labelledby="subjects-heading">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 id="subjects-heading" className="text-lg font-bold">{isEn ? 'Subjects' : 'વિષયો'}</h2>
+              <p className="text-xs text-ink-muted">
+                {isEn ? 'Accuracy and topics for the selected range' : 'પસંદ કરેલા સમયગાળા માટે ચોકસાઈ અને વિષયો'}
+              </p>
+            </div>
 
-      <LessonVideoProgress />
+            {stats.subjects.map(subject => {
+              const st = SUBJECT_STYLES[subject.key];
+              const isOpen = Boolean(expanded[subject.key]);
+              return (
+                <div key={subject.key} className="rounded-xl border border-line bg-surface print-avoid-break">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() => setExpanded(prev => ({ ...prev, [subject.key]: !prev[subject.key] }))}
+                    className="flex w-full items-center gap-3 p-4 text-left"
+                  >
+                    {/* Subject colour is a thin accent only */}
+                    <span className={`w-1 self-stretch min-h-[36px] rounded-full ${st.bg}`} aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="font-bold">{isEn ? st.en : st.gu}</span>
+                        <span className="text-xs text-ink-muted tabular-nums">
+                          {isEn
+                            ? `${subject.lessonsCompleted} of ${subject.lessonsTotal} lessons`
+                            : `${subject.lessonsTotal} માંથી ${subject.lessonsCompleted} પાઠ`}
+                        </span>
+                      </span>
+                      <span className="mt-2 flex items-center gap-2">
+                        <span
+                          className="h-1.5 flex-1 rounded-full bg-line overflow-hidden"
+                          role="progressbar"
+                          aria-valuenow={subject.progress}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${isEn ? st.en : st.gu} lessons`}
+                        >
+                          <span className={`block h-full rounded-full ${st.bg}`} style={{ width: `${subject.progress}%` }} />
+                        </span>
+                        <span className="text-xs font-semibold tabular-nums text-ink-muted w-9 text-right">{subject.progress}%</span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block font-heading text-xl font-bold tabular-nums leading-none">
+                        {subject.accuracy === null ? '—' : `${subject.accuracy}%`}
+                      </span>
+                      <span className="block text-xs text-ink-muted mt-1">{isEn ? 'accuracy' : 'ચોકસાઈ'}</span>
+                    </span>
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 text-ink-muted transition-transform print-hide ${isOpen ? 'rotate-180' : ''}`}
+                      aria-hidden="true"
+                    />
+                  </button>
 
-      <WritingAttemptsPanel />
+                  <div className={`border-t border-line px-4 pb-4 pt-2 ${isOpen ? '' : 'hidden print:block'}`}>
+                    {subject.topics.length === 0 ? (
+                      <p className="text-sm text-ink-muted py-2">{isEn ? 'No topics' : 'કોઈ વિષય નથી'}</p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <caption className="sr-only">
+                          {isEn ? `${st.en} topics: accuracy, attempts and status` : `${st.gu} વિષયો: ચોકસાઈ, પ્રયત્નો અને સ્થિતિ`}
+                        </caption>
+                        <thead className="hidden sm:table-header-group text-ink-muted">
+                          <tr className="border-b border-line">
+                            <th scope="col" className="py-2 text-left font-semibold">{isEn ? 'Topic' : 'વિષય'}</th>
+                            <th scope="col" className="py-2 text-left font-semibold">{isEn ? 'Accuracy' : 'ચોકસાઈ'}</th>
+                            <th scope="col" className="py-2 text-left font-semibold">{isEn ? 'Attempts' : 'પ્રયત્નો'}</th>
+                            <th scope="col" className="py-2 text-left font-semibold">{isEn ? 'Status' : 'સ્થિતિ'}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-line">
+                          {subject.topics.map(topic => (
+                            <tr key={topic.id} className="block sm:table-row py-2">
+                              <th scope="row" className="block sm:table-cell py-1 text-left font-semibold" lang="gu">
+                                {isEn ? topic.nameEn : topic.name}
+                              </th>
+                              <td className="block sm:table-cell py-1 sm:py-2 tabular-nums">
+                                <span className="sm:hidden text-ink-muted">{isEn ? 'Accuracy: ' : 'ચોકસાઈ: '}</span>
+                                {topic.accuracy === null ? '—' : `${topic.accuracy}%`}
+                              </td>
+                              <td className="block sm:table-cell py-1 sm:py-2 text-ink-muted tabular-nums">
+                                <span className="sm:hidden">{isEn ? 'Attempts: ' : 'પ્રયત્નો: '}</span>
+                                {topic.attempted === 0
+                                  ? '—'
+                                  : isEn
+                                  ? `${topic.correct} of ${topic.attempted} correct`
+                                  : `${topic.attempted} માંથી ${topic.correct} સાચા`}
+                              </td>
+                              <td className="block sm:table-cell py-1.5 sm:py-2">
+                                <StatusChip status={topic.status} isEn={isEn} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                    <p className="mt-2 text-xs text-ink-muted">
+                      {isEn
+                        ? `Mastered needs ${STATUS_THRESHOLDS.masteredMinAccuracy}% over ${STATUS_THRESHOLDS.masteredMinAttempts}+ attempts; below ${STATUS_THRESHOLDS.needsPracticeBelow}% needs practice.`
+                        : `નિપુણ માટે ${STATUS_THRESHOLDS.masteredMinAttempts}+ પ્રયત્નોમાં ${STATUS_THRESHOLDS.masteredMinAccuracy}% જરૂરી; ${STATUS_THRESHOLDS.needsPracticeBelow}% થી નીચે મહાવરો જરૂરી.`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
 
-      {/* Recent activity (moved here from the Home screen) */}
-      <Card className="space-y-3">
-        <CardTitle icon={History} title={isEn ? 'Recent activity' : 'તાજેતરના પ્રયત્નો'} />
-        <ul className="divide-y divide-line">
-          {student.recentAttempts.map(att => (
-            <li key={att.id} className="py-2.5 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-semibold">{att.topic}</p>
-                <p className="text-sm text-ink-muted">{att.date} · {att.time}</p>
-              </div>
-              <span className="shrink-0 font-bold tabular-nums px-2.5 py-1 rounded-lg bg-canvas border border-line">{att.score}</span>
-            </li>
-          ))}
-        </ul>
-      </Card>
+          {/* Recent activity: the last five saved attempts */}
+          {stats.recentActivity.length > 0 && (
+            <section className="rounded-xl border border-line bg-surface p-4 sm:p-5 space-y-2 print-avoid-break" aria-labelledby="recent-heading">
+              <h2 id="recent-heading" className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                {isEn ? 'Recent activity' : 'તાજેતરની પ્રવૃત્તિ'}
+              </h2>
+              <ul className="divide-y divide-line">
+                {stats.recentActivity.map(a => (
+                  <li key={a.id} className="flex items-center gap-3 py-2.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold truncate">{a.topic || (isEn ? 'Practice' : 'મહાવરો')}</span>
+                      <span className="block text-xs text-ink-muted">
+                        {isEn ? SUBJECT_STYLES[a.subjectKey]?.en : SUBJECT_STYLES[a.subjectKey]?.gu}
+                        {' · '}{formatWhen(a.at, isEn)}
+                      </span>
+                    </span>
+                    <span className={`inline-flex items-center gap-1 text-xs font-semibold shrink-0 ${a.correct ? 'text-success' : 'text-danger'}`}>
+                      {a.correct
+                        ? <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                        : <XCircle className="w-4 h-4" aria-hidden="true" />}
+                      {a.correct ? (isEn ? 'Correct' : 'સાચું') : (isEn ? 'Not correct' : 'ખોટું')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {stats.recentActivity.length === 0 && (
+            <p className="flex items-center gap-2 text-sm text-ink-muted">
+              <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+              {isEn ? 'No attempts in this range.' : 'આ સમયગાળામાં કોઈ પ્રયત્ન નથી.'}
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 };

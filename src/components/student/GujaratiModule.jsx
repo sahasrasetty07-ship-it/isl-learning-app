@@ -8,15 +8,13 @@ import { AssignmentBanner } from '../common/AssignmentBanner';
 import { LessonClipButtons } from '../common/LessonClipButtons';
 import { LessonClipModal } from '../common/LessonClipModal';
 import { letterClipItem, numberClipItem } from '../../data/lessonClips';
-import { PageHeader, Tabs, Chip, Card, IconButton, SignVideoButton, Button, buttonClass } from '../ui';
+import { PageHeader, Tabs, Chip, Card, SignVideoButton, Button } from '../ui';
 import {
   BookOpen,
   Hash,
   MessageSquare,
   Video,
-  Hand,
-  Volume2,
-  PenLine
+  Hand
 } from 'lucide-react';
 
 export const GujaratiModule = () => {
@@ -96,7 +94,7 @@ export const GujaratiModule = () => {
   };
 
   // Lesson card: sign video first (largest), then letter and word, then the next step
-  const lessonCard = ({ item, glyph, title, subtitle, tag, speak, signLabel, children, clip }) => (
+  const lessonCard = ({ item, glyph, title, subtitle, tag, signLabel, children, clip }) => (
     <Card className="space-y-4">
       <SignVideoButton
         onClick={() => openSignModal(item)}
@@ -113,14 +111,7 @@ export const GujaratiModule = () => {
           <p className="text-ink-muted">{subtitle}</p>
           {tag && <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-lg bg-canvas border border-line">{tag}</span>}
         </div>
-        <IconButton onClick={speak} label={isEn ? 'Listen to pronunciation' : 'અવાજ સાંભળો'}>
-          <Volume2 className="w-5 h-5" aria-hidden="true" />
-        </IconButton>
       </div>
-      <a href="#writing-pad" className={buttonClass('primary', 'w-full min-h-[52px] text-base')}>
-        <PenLine className="w-5 h-5" aria-hidden="true" />
-        {isEn ? 'Practise writing' : 'લખવાનો મહાવરો કરો'}
-      </a>
       <LessonClipButtons item={clip} onOpen={type => setOpenClip({ item: clip, type })} />
       {children}
     </Card>
@@ -208,7 +199,6 @@ export const GujaratiModule = () => {
               title: selectedLetter.word,
               subtitle: selectedLetter.wordEnglish,
               tag: isEn ? selectedLetter.english : selectedLetter.category,
-              speak: () => speakText(`${selectedLetter.letter} એટલે ${selectedLetter.word}`),
               signLabel: isEn ? 'Watch the sign' : 'સંકેત જુઓ',
               clip: letterClip,
               children: howToSign(
@@ -272,7 +262,6 @@ export const GujaratiModule = () => {
               glyph: selectedNumber.number,
               title: `${selectedNumber.word} (${selectedNumber.englishWord})`,
               subtitle: isEn ? `Gujarati numeral for ${selectedNumber.englishNumber}` : `સંખ્યા અંક ${selectedNumber.englishNumber}`,
-              speak: () => speakText(selectedNumber.word),
               signLabel: isEn ? 'Watch the number sign' : 'સંખ્યાનો સંકેત જુઓ',
               clip: numberClip,
               children: (
@@ -326,9 +315,6 @@ export const GujaratiModule = () => {
                   <h3 className="text-xl font-bold leading-tight">{s.gujarati}</h3>
                   <p className="text-ink-muted">{s.english}</p>
                 </div>
-                <IconButton onClick={() => speakText(s.gujarati)} label={isEn ? 'Listen' : 'સાંભળો'}>
-                  <Volume2 className="w-5 h-5" aria-hidden="true" />
-                </IconButton>
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">

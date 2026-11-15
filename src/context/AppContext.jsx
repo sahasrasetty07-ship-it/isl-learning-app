@@ -1,84 +1,25 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { initialStudentData, classStudents } from '../data/studentAnalytics';
 import { isClipItemComplete } from '../data/lessonClips';
+import { getLocalDateString, calculateStreak } from '../lib/dateUtils';
 import { useAuth } from './AuthContext';
 
 const AppContext = createContext();
-const STUDENT_KEY = 'gsl-student-v1';
+// v2 drops the seeded demo numbers that older saves carried.
+const STUDENT_KEY = 'gsl-student-v2';
 const SETTINGS_KEY = 'gsl-settings-v1';
 export const DEFAULT_WRITING_THRESHOLD = 85;
 
-// Returns the current local calendar date formatted as YYYY-MM-DD (timezone-safe)
-export const getLocalDateString = (d = new Date()) => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-// Calculates current streak based on actual activity dates in local time
-export const calculateStreak = (activityDates = [], referenceDate = new Date()) => {
-  if (!Array.isArray(activityDates) || activityDates.length === 0) return 0;
-
-  const dateSet = new Set(activityDates);
-  const todayStr = getLocalDateString(referenceDate);
-
-  // Evaluate at noon to ensure robustness against clock skew and date boundaries
-  const ref = new Date(
-    referenceDate.getFullYear(),
-    referenceDate.getMonth(),
-    referenceDate.getDate(),
-    12,
-    0,
-    0
-  );
-
-  let currentCheck = new Date(ref);
-  let streak = 0;
-
-  // Case 1: Practiced today -> count consecutive active days back from today
-  if (dateSet.has(todayStr)) {
-    while (true) {
-      const dateStr = getLocalDateString(currentCheck);
-      if (dateSet.has(dateStr)) {
-        streak++;
-        currentCheck.setDate(currentCheck.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-    return streak;
-  }
-
-  // Case 2: Not yet practiced today -> check if streak is preserved from yesterday
-  currentCheck.setDate(currentCheck.getDate() - 1);
-  const yesterdayStr = getLocalDateString(currentCheck);
-
-  if (dateSet.has(yesterdayStr)) {
-    while (true) {
-      const dateStr = getLocalDateString(currentCheck);
-      if (dateSet.has(dateStr)) {
-        streak++;
-        currentCheck.setDate(currentCheck.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-    return streak;
-  }
-
-  // Case 3: Neither today nor yesterday had activity -> streak is broken
-  return 0;
-};
+// Re-exported so existing imports of these helpers keep working
+export { getLocalDateString, calculateStreak };
 
 export const AppProvider = ({ children }) => {
   const { profile, isAllAccess } = useAuth();
 
-  // Permitted roles in the app
+  // Permitted roles in the app. The role itself always comes from the profile;
+  // there is deliberately no fallback role here.
   const VALID_ROLES = ['student', 'teacher', 'parent'];
-  const profileRole = (profile?.role && VALID_ROLES.includes(profile.role))
-    ? profile.role
-    : 'student';
+  const profileRole = VALID_ROLES.includes(profile?.role) ? profile.role : null;
 
   // Selected role state for all-access users, defaulting to profile.role
   const [selectedRole, setSelectedRole] = useState(profileRole);
@@ -88,22 +29,18 @@ export const AppProvider = ({ children }) => {
     setSelectedRole(profileRole);
   }, [profileRole]);
 
-  // Compute effectiveRole:
-  // UI convenience for all-access team members to preview different role views.
-  // Non-all-access users strictly receive their own profile.role.
-  const effectiveRole = isAllAccess
-    ? (VALID_ROLES.includes(selectedRole) ? selectedRole : profileRole)
-    : profileRole;
+  // Only all-access accounts may preview another role's screens.
+  const currentRole = isAllAccess && VALID_ROLES.includes(selectedRole) ? selectedRole : profileRole;
 
-  // Make setCurrentRole a no-op for non-all-access users
+  // Switching role resets the tab so a teacher-only tab can never linger.
   const setCurrentRole = (role) => {
     if (!isAllAccess) return;
-    if (VALID_ROLES.includes(role)) {
-      setSelectedRole(role);
-    }
+    if (!VALID_ROLES.includes(role)) return;
+    setSelectedRole(role);
+    setActiveTab('dashboard');
   };
 
-  const canSwitchRoles = isAllAccess;
+  const canSwitchRoles = Boolean(isAllAccess && profileRole);
   
   // UI Language: 'en' (English default) | 'gu' (Gujarati)
   const [uiLanguage, setUiLanguage] = useState('en');
@@ -150,6 +87,24 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem(STUDENT_KEY, JSON.stringify(student));
   }, [student]);
 
+  // Track active time simply: while the tab is visible, add 30 seconds to
+  // today's bucket. This is the only source of the report's "this week" tile.
+  useEffect(() => {
+    const TICK_MS = 30000;
+    const id = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      const day = getLocalDateString();
+      setStudent(prev => ({
+        ...prev,
+        sessionSecondsByDate: {
+          ...(prev.sessionSecondsByDate || {}),
+          [day]: ((prev.sessionSecondsByDate || {})[day] || 0) + TICK_MS / 1000
+        }
+      }));
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
   // Teacher setting: handwriting pass mark (0–100). Higher is stricter.
   const [writingThreshold, setWritingThreshold] = useState(() => {
     try {
@@ -182,7 +137,11 @@ export const AppProvider = ({ children }) => {
     setActiveTab(asg.subjectKey);
   };
   const stopAssignment = () => setActiveAssignmentId(null);
-  const [studentsList, setStudentsList] = useState(classStudents);
+  // The class roster is sample data. It is only loaded when demo mode is on
+  // (VITE_ENABLE_DEMO === 'true'), and the teacher screen then labels it.
+  const [studentsList, setStudentsList] = useState(() =>
+    import.meta.env.VITE_ENABLE_DEMO === 'true' ? classStudents : []
+  );
   
   // Selected lesson/letter for direct modal preview
   const [activeVideoModal, setActiveVideoModal] = useState(null);
@@ -217,15 +176,9 @@ export const AppProvider = ({ children }) => {
   const recordExerciseAttempt = (subjectKey, isCorrect, topicName = '', points = 10, exerciseType = null, options = {}) => {
     setStudent(prev => {
       const currentSubject = prev.subjects[subjectKey] || {};
-      const attempted = (currentSubject.attempted || 0) + 1;
-      const correct = (currentSubject.correct || 0) + (isCorrect ? 1 : 0);
 
       const updatedSubject = {
         ...currentSubject,
-        attempted,
-        correct,
-        accuracy: Math.round((100 * correct) / attempted),
-        progress: isCorrect ? Math.min(100, (currentSubject.progress || 0) + 2) : currentSubject.progress,
         lastPracticed: uiLanguage === 'en' ? 'Just now' : 'હમણાં જ'
       };
 
@@ -250,16 +203,27 @@ export const AppProvider = ({ children }) => {
 
       const updatedStreak = calculateStreak(updatedDates);
 
+      // Structured log the report computes every number from
+      const logEntry = {
+        id: newAttempt.id,
+        subject: subjectKey,
+        topic: topicName || '',
+        exerciseType: exerciseType || null,
+        correct: Boolean(isCorrect),
+        at: new Date().toISOString()
+      };
+
       return {
         ...prev,
-        totalStars: prev.totalStars + (isCorrect ? points : 0),
+        totalStars: (prev.totalStars || 0) + (isCorrect ? points : 0),
         activityDates: updatedDates,
         currentStreak: updatedStreak,
         subjects: {
           ...prev.subjects,
           [subjectKey]: updatedSubject
         },
-        recentAttempts: [newAttempt, ...prev.recentAttempts.slice(0, 5)],
+        attemptLog: [logEntry, ...(prev.attemptLog || [])].slice(0, 500),
+        recentAttempts: [newAttempt, ...(prev.recentAttempts || []).slice(0, 5)],
         pendingAssignments: prev.pendingAssignments.map(asg => {
           const counts = asg.id === activeAssignmentId
             && asg.subjectKey === subjectKey
@@ -311,21 +275,25 @@ export const AppProvider = ({ children }) => {
     const before = prev.lessonClips?.[item.key] || {};
     if (before[clip]) return prev;
     const after = { ...before, [clip]: true };
-    const subject = prev.subjects[item.subject];
-    const completes = subject && !isClipItemComplete(item, before) && isClipItemComplete(item, after);
+
+    // Watching a lesson is activity too: it keeps the streak honest even on a
+    // day with no quizzes or writing.
+    const todayStr = getLocalDateString();
+    const prevDates = Array.isArray(prev.activityDates) ? prev.activityDates : [];
+    const updatedDates = prevDates.includes(todayStr) ? prevDates : [...prevDates, todayStr];
+
     return {
       ...prev,
       lessonClips: { ...prev.lessonClips, [item.key]: after },
-      subjects: completes
-        ? { ...prev.subjects, [item.subject]: { ...subject, progress: Math.min(100, (subject.progress || 0) + 1) } }
-        : prev.subjects
+      activityDates: updatedDates,
+      currentStreak: calculateStreak(updatedDates)
     };
   });
 
   return (
     <AppContext.Provider
       value={{
-        currentRole: effectiveRole,
+        currentRole,
         setCurrentRole,
         canSwitchRoles,
         uiLanguage,

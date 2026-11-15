@@ -1,4 +1,6 @@
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { computeReportStats } from '../../lib/reportStats';
 import { SUBJECT_STYLES, ProgressBar, PageHeader } from '../ui';
 import { BookOpen, ChevronRight } from 'lucide-react';
 
@@ -11,12 +13,14 @@ const SUBJECT_TEXT = {
 // The three subjects as large tap rows. Used by Learn and by the student Home screen.
 export const SubjectList = () => {
   const { student, setActiveTab, uiLanguage } = useApp();
+  const { profile } = useAuth();
   const isEn = uiLanguage === 'en';
+  const stats = computeReportStats(student, profile);
   return (
     <ul className="space-y-3">
       {['gujarati', 'math', 'science'].map(key => {
         const s = SUBJECT_STYLES[key];
-        const progress = student.subjects[key].progress;
+        const progress = stats.subjects.find(sub => sub.key === key)?.progress ?? 0;
         return (
           <li key={key}>
             <button

@@ -142,13 +142,6 @@ export const SpeechToSign = () => {
     setCoverage(calculateCoverage(seq));
   };
 
-  // Preset quick test phrases
-  const handleSelectPreset = (phrase) => {
-    setFinalTranscript(phrase);
-    setInterimTranscript('');
-    handleConvert(phrase);
-  };
-
   // Fallback MediaRecorder Whisper audio upload
   const handleToggleFallbackRecording = async () => {
     if (!fallbackUrl) return;
@@ -229,11 +222,8 @@ export const SpeechToSign = () => {
         {/* Header and Language Selector */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
           <div className="text-left">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
-              {isEn ? 'Speech Recognition → ISL' : 'ગુજરાતી વાણી → સાઇન લેંગ્વેજ'}
-            </span>
             <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1">
-              {isEn ? 'Speak to Generate ISL Sign Language' : 'બોલો અને સાઇન સંકેત મેળવો'}
+              {isEn ? 'Speak to Generate' : 'બોલો અને બનાવો'}
             </h3>
           </div>
 
@@ -383,32 +373,6 @@ export const SpeechToSign = () => {
             )}
           </div>
         )}
-
-        {/* Quick Test Phrases */}
-        <div className="pt-2 border-t border-slate-100">
-          <span className="text-[11px] font-bold text-slate-400 block mb-1.5">
-            {isEn ? 'Quick Test Phrases (click to test sign lookup):' : 'ઝડપી ટેસ્ટ વાક્યો (ક્લિક કરી સાઇન મેળવો):'}
-          </span>
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            {[
-              'નમસ્તે, તમારું નામ શું છે?',
-              'મને મદદ જોઈએ છે',
-              'હું વિદ્યાર્થી છું',
-              'શુભ સવાર',
-              'કમળ અને ઘર',
-              'એક બે ત્રણ',
-            ].map((txt) => (
-              <button
-                key={txt}
-                type="button"
-                onClick={() => handleSelectPreset(txt)}
-                className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 hover:bg-purple-100 hover:text-purple-900 text-slate-700 transition border border-slate-200"
-              >
-                <span lang="gu">{txt}</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Editable Final Transcript Card */}

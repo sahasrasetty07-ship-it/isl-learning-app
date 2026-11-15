@@ -21,7 +21,6 @@ import {
   Loader2,
   ArrowRight,
   PenLine,
-  Smile,
   ChevronDown,
   X
 } from 'lucide-react';
@@ -651,13 +650,6 @@ export const WritingPad = ({
               >
                 <PenLine className="w-4 h-4 text-pad-saffron" />
                 {isEn ? 'How to write' : 'કેવી રીતે લખવું'}
-              </button>
-              <button
-                onClick={() => onOpenClip('say')}
-                className="min-h-tap px-3 rounded-xl bg-surface border border-line text-ink hover:bg-canvas flex items-center gap-1.5 transition"
-              >
-                <Smile className="w-4 h-4 text-pad-saffron" />
-                {isEn ? 'How to say' : 'કેવી રીતે બોલવું'}
               </button>
             </div>
           )}

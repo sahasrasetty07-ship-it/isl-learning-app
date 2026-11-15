@@ -57,6 +57,7 @@ export const TeacherDashboard = () => {
     setCurrentRole, setIsMobileFrame, setActiveTab,
     writingThreshold, setWritingThreshold
   } = useApp();
+  const demoEnabled = import.meta.env.VITE_ENABLE_DEMO === 'true';
   const liveStudentId = student.id;
   const writingSummary = summariseWriting(student.writingAttempts, student.writingStars);
   const assignments = student.pendingAssignments.filter(a => a.count > 0);
@@ -184,10 +185,17 @@ export const TeacherDashboard = () => {
           {/* Class Students Roster */}
           <Card id="t-students" className="scroll-mt-24 space-y-4 min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-              <CardTitle
-                title={isEn ? 'Students' : 'વર્ગના વિદ્યાર્થીઓ અને પ્રગતિ'}
-                subtitle={isEn ? 'Lowest progress first' : 'ઓછી પ્રગતિ વાળા પહેલા'}
-              />
+              <div className="min-w-0">
+                <CardTitle
+                  title={isEn ? 'Students' : 'વર્ગના વિદ્યાર્થીઓ અને પ્રગતિ'}
+                  subtitle={isEn ? 'Lowest progress first' : 'ઓછી પ્રગતિ વાળા પહેલા'}
+                />
+                {demoEnabled && (
+                  <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-action/40 bg-action-soft px-2 py-0.5 text-xs font-semibold text-action">
+                    {isEn ? 'Sample data' : 'નમૂનાના આંકડા'}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
                 <input
@@ -217,6 +225,13 @@ export const TeacherDashboard = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
+                  {sortedStudents.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="py-6 text-center text-sm text-ink-muted">
+                        {isEn ? 'No students loaded.' : 'કોઈ વિદ્યાર્થી લોડ થયા નથી.'}
+                      </td>
+                    </tr>
+                  )}
                   {sortedStudents.map(student => (
                     <tr key={student.id}>
                       <td className="py-3 pr-3 tabular-nums text-ink-muted">{student.rollNo}</td>
@@ -307,8 +322,8 @@ export const TeacherDashboard = () => {
               <CardTitle
                 title={isEn ? 'Assigned practice' : 'આપેલ મહાવરો'}
                 subtitle={isEn
-                  ? 'Live progress of Aarav Patel (demo student). Assign a set again to repeat the practice.'
-                  : 'આરવ પટેલ (ડેમો વિદ્યાર્થી)ની પ્રગતિ. મહાવરો ફરી કરાવવા ફરીથી ફાળવો.'}
+                  ? 'Live progress of the signed-in student. Assign a set again to repeat the practice.'
+                  : 'સાઇન-ઇન વિદ્યાર્થીની પ્રગતિ. મહાવરો ફરી કરાવવા ફરીથી ફાળવો.'}
               />
               {assignments.length === 0 && (
                 <p className="text-sm text-ink-muted">{isEn ? 'No practice assigned yet.' : 'હજુ કોઈ મહાવરો આપ્યો નથી.'}</p>
@@ -380,16 +395,16 @@ export const TeacherDashboard = () => {
 
           <WritingAttemptsPanel
             subtitle={isEn
-              ? 'Live writing-pad attempts of Aarav Patel (demo student): score, problem found, attempt number and time.'
-              : 'આરવ પટેલ (ડેમો વિદ્યાર્થી)ના લેખન પ્રયત્નો: ગુણ, ભૂલ, પ્રયત્ન ક્રમ અને સમય.'}
+              ? 'Live writing-pad attempts of the signed-in student: score, problem found, attempt number and time.'
+              : 'સાઇન-ઇન વિદ્યાર્થીના લેખન પ્રયત્નો: ગુણ, ભૂલ, પ્રયત્ન ક્રમ અને સમય.'}
           />
         </div>
 
         <div id="t-videos" className="scroll-mt-24">
           <LessonVideoProgress
             subtitle={isEn
-              ? 'Aarav Patel (demo student): lessons whose sign, how-to-write and how-to-say videos have all been watched.'
-              : 'આરવ પટેલ (ડેમો વિદ્યાર્થી): જે પાઠના સાઇન, લખવાના અને બોલવાના બધા વિડીયો જોવાયા છે.'}
+              ? 'The signed-in student: lessons whose sign, how-to-write and how-to-say videos have all been watched.'
+              : 'સાઇન-ઇન વિદ્યાર્થી: જે પાઠના સાઇન, લખવાના અને બોલવાના બધા વિડીયો જોવાયા છે.'}
           />
         </div>
       </div>

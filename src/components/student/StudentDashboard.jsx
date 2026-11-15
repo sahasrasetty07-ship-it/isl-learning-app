@@ -1,4 +1,6 @@
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { computeReportStats } from '../../lib/reportStats';
 import { SubjectList } from './LearnHub';
 import { Card, CardTitle, ProgressBar, Button, SUBJECT_STYLES } from '../ui';
 import {
@@ -14,12 +16,15 @@ const SUBJECT_KEY_BY_LABEL = { 'ગુજરાતી': 'gujarati', 'ગણિ�
 
 export const StudentDashboard = () => {
   const { student, setActiveTab, startAssignment, uiLanguage } = useApp();
+  const { profile } = useAuth();
   const openAssignments = student.pendingAssignments.filter(a => a.status !== 'પૂર્ણ');
   const isEn = uiLanguage === 'en';
+  const stats = computeReportStats(student, profile);
 
   // Continue where the student last practised
   const continueKey = SUBJECT_KEY_BY_LABEL[student.recentAttempts[0]?.subject] || 'gujarati';
   const continueSubject = student.subjects[continueKey];
+  const continueProgress = stats.subjects.find(s => s.key === continueKey)?.progress ?? 0;
   const cs = SUBJECT_STYLES[continueKey];
 
   return (
@@ -29,7 +34,9 @@ export const StudentDashboard = () => {
         <div>
           <p className="text-sm text-ink-muted">{isEn ? 'Welcome back' : 'ફરી સ્વાગત છે'}</p>
           <h1 className="text-2xl sm:text-3xl font-bold leading-tight">
-            {isEn ? `Hello, ${student.name.split(' ')[0]}` : `નમસ્તે, ${student.name.split(' ')[0]}`}
+            {isEn
+              ? `Hello, ${stats.studentName.split(' ')[0] || 'Student'}`
+              : `નમસ્તે, ${stats.studentName.split(' ')[0] || 'વિદ્યાર્થી'}`}
           </h1>
         </div>
         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -54,12 +61,12 @@ export const StudentDashboard = () => {
             <p className="text-sm font-semibold text-ink-muted">{isEn ? 'Continue' : 'ચાલુ રાખો'}</p>
             <h2 className="text-xl font-bold leading-tight">{isEn ? cs.en : cs.gu}</h2>
             <p className="text-sm text-ink-muted">
-              {isEn ? 'Last practised:' : 'છેલ્લે:'} {continueSubject.lastPracticed}
+              {isEn ? 'Last practised:' : 'છેલ્લે:'} {continueSubject.lastPracticed || (isEn ? 'Not yet' : 'હજુ નહીં')}
             </p>
           </div>
         </div>
         <ProgressBar
-          value={continueSubject.progress}
+          value={continueProgress}
           color={cs.bg}
           label={isEn ? 'Progress' : 'પ્રગતિ'}
         />
@@ -133,7 +140,7 @@ export const StudentDashboard = () => {
       <section className="space-y-3" aria-labelledby="subjects-title">
         <div className="flex items-center justify-between">
           <h2 id="subjects-title" className="text-xl font-bold">{isEn ? 'Subjects' : 'વિષયો'}</h2>
-          <span className="text-sm text-ink-muted">{isEn ? 'Overall' : 'કુલ'} {student.overallProgress}%</span>
+          <span className="text-sm text-ink-muted">{isEn ? 'Overall' : 'કુલ'} {stats.overallProgress}%</span>
         </div>
         <SubjectList />
       </section>

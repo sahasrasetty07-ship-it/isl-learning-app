@@ -1,4 +1,6 @@
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { computeReportStats } from '../../lib/reportStats';
 import { WritingAttemptsPanel } from '../common/WritingAttemptsPanel';
 import { LessonVideoProgress } from '../common/LessonVideoProgress';
 import { Card, CardTitle, IconButton, PageHeader, ProgressBar, SUBJECT_STYLES } from '../ui';
@@ -7,13 +9,16 @@ import {
   Play,
   Volume2,
   Flame,
-  MessageSquareText,
   Users
 } from 'lucide-react';
 
 export const ParentDashboard = () => {
-  const { student, studentsList, setActiveVideoModal, speakText, uiLanguage } = useApp();
+  const { student, setActiveVideoModal, speakText, uiLanguage } = useApp();
+  const { profile } = useAuth();
   const isEn = uiLanguage === 'en';
+  // Same numbers as the student report and the header pills
+  const stats = computeReportStats(student, profile);
+  const childName = stats.studentName || (isEn ? 'Student' : 'વિદ્યાર્થી');
 
   const homePhrases = [
     {
@@ -58,12 +63,18 @@ export const ParentDashboard = () => {
     }
   ];
 
-  const rosterEntry = studentsList.find(s => s.id === student.id);
-  const subjectBars = [
-    { key: 'gujarati', en: 'Gujarati', gu: 'ગુજરાતી ભાષા', noteEn: 'Handwriting is excellent', noteGu: 'અક્ષરલેખન ઉત્તમ છે' },
-    { key: 'math', en: 'Maths', gu: 'ગણિત શિક્ષણ', noteEn: 'Practice subtraction at home', noteGu: 'બાદબાકીમાં મદદ કરો' },
-    { key: 'science', en: 'Science', gu: 'વિજ્ઞાન ખ્યાલો', noteEn: 'Solar system signs mastered', noteGu: 'સૂર્યમંડળ સાઇન પૂર્ણ' }
-  ];
+  const subjectBars = stats.subjects.map(s => ({
+    key: s.key,
+    en: SUBJECT_STYLES[s.key].en,
+    gu: SUBJECT_STYLES[s.key].gu,
+    progress: s.progress,
+    noteEn: s.lessonsCompleted === 0
+      ? 'No lessons completed yet'
+      : `Lessons ${s.lessonsCompleted} of ${s.lessonsTotal}${s.accuracy === null ? '' : ` · ${s.accuracy}% accuracy`}`,
+    noteGu: s.lessonsCompleted === 0
+      ? 'હજુ કોઈ પાઠ પૂરો નથી'
+      : `પાઠ ${s.lessonsTotal} માંથી ${s.lessonsCompleted}${s.accuracy === null ? '' : ` · ${s.accuracy}% ચોકસાઈ`}`
+  }));
 
   return (
     <div className="space-y-5">
@@ -79,12 +90,14 @@ export const ParentDashboard = () => {
       <Card className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold leading-tight">{student.name}</h2>
-            <p className="text-sm text-ink-muted">{student.grade} · {student.school}</p>
+            <h2 className="text-xl font-bold leading-tight">{childName}</h2>
+            {(stats.grade || stats.school) && (
+              <p className="text-sm text-ink-muted">{[stats.grade, stats.school].filter(Boolean).join(' · ')}</p>
+            )}
           </div>
           <span className="inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-xl bg-canvas border border-line text-sm font-semibold">
             <Flame className="w-4 h-4 text-action" aria-hidden="true" />
-            {student.currentStreak} {isEn ? 'day streak' : 'દિવસથી નિયમિત'}
+            {stats.streakDays} {isEn ? 'day streak' : 'દિવસથી નિયમિત'}
           </span>
         </div>
         {subjectBars.map(b => {
@@ -93,29 +106,13 @@ export const ParentDashboard = () => {
             <div key={b.key} className="space-y-1">
               <ProgressBar
                 label={isEn ? b.en : b.gu}
-                value={student.subjects[b.key].progress}
+                value={b.progress}
                 color={st.bg}
               />
               <p className="text-sm text-ink-muted">{isEn ? b.noteEn : b.noteGu}</p>
             </div>
           );
         })}
-      </Card>
-
-      {/* Teacher's recommendation */}
-      <Card className="space-y-2 border-action">
-        <CardTitle icon={MessageSquareText} iconClass="text-action" title={isEn ? "Teacher's recommendation" : 'શિક્ષકની ભલામણ'} />
-        <p className="leading-relaxed">
-          {isEn
-            ? 'Aarav exhibits exceptional handwriting skills in Gujarati alphabets and strong grasp of Solar System signs. In Mathematics, additional practice in Subtraction and Division is recommended. Parents are advised to spend 10 minutes daily on the Subtraction Writing Pad exercises.'
-            : 'આરવ ગુજરાતી મૂળાક્ષરો અને સૂર્યમંડળના સાઇન સંકેતોમાં ખૂબ જ કુશળ છે. ગણિતમાં બાદબાકી અને ભાગાકાર માં થોડા વધુ મહાવરાની જરૂર છે. આગામી અઠવાડિયે દરરોજ ૧૦ મિનિટ બાદબાકી પેડ પ્રેક્ટિસ કરવા ભલામણ છે.'}
-        </p>
-        {rosterEntry?.weakTopic && (
-          <p className="text-sm">
-            <span className="text-ink-muted">{isEn ? 'Practise at home:' : 'ઘરે મહાવરો:'}</span>{' '}
-            <span className="font-semibold px-2 py-0.5 rounded-lg bg-action-soft">{rosterEntry.weakTopic}</span>
-          </p>
-        )}
       </Card>
 
       {/* Home signs: tap a row to play the sign */}

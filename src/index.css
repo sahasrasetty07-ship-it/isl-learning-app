@@ -114,3 +114,41 @@ canvas {
   .animate-fade-in,
   .pad-tick-pop, .pad-tick-draw, .pad-star-in, .pad-shake, .pad-slide-up { animation: none; stroke-dasharray: none; }
 }
+
+/* ── Print: A4, no navigation or buttons, no cut-off cards ───────────────── */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  /* App chrome and anything explicitly screen-only */
+  header[role='banner'],
+  nav,
+  .print-hide {
+    display: none !important;
+  }
+  /* Page wrappers: full width, no screen padding */
+  main,
+  main > div {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    background: #fff !important;
+  }
+  /* Keep cards in one piece across page breaks */
+  .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Collapsed subject sections still print their topic tables */
+  .print-block {
+    display: block !important;
+  }
+  a[href]::after {
+    content: '';
+  }
+}

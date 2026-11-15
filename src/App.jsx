@@ -2,6 +2,7 @@ import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { useAuth } from './context/AuthContext';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { RolePicker } from './components/auth/RolePicker';
 import { Header } from './components/common/Header';
 import { Navigation } from './components/common/Navigation';
 import { SignVideoModal } from './components/common/SignVideoModal';
@@ -130,21 +131,70 @@ const MainContent = () => {
 };
 
 export default function App() {
-  const { user, profile, loading, signInWithGoogle, signInAsDemo, isConfigured } = useAuth();
+  const {
+    user,
+    profile,
+    loading,
+    roleLoading,
+    role,
+    refreshProfile,
+    signInWithGoogle,
+    signInAsDemo,
+    signOut,
+    isConfigured,
+    demoEnabled
+  } = useAuth();
 
-  // If auth is initializing or profile hasn't loaded yet, show the loading state, never the role switcher
-  if (loading || (user && !profile)) {
+  // 1) Session/profile still loading: neutral loader, never a dashboard flash.
+  if (loading || (user && roleLoading)) {
     return <LoadingSpinner />;
   }
 
+  // 2) Logged out.
   if (!user) {
     return (
       <LoginScreen
         signInWithGoogle={signInWithGoogle}
         signInAsDemo={signInAsDemo}
         isConfigured={isConfigured}
+        demoEnabled={demoEnabled}
       />
     );
+  }
+
+  // 3) Signed in but the profile row could not be read.
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-canvas">
+        <div className="max-w-md w-full bg-surface border border-line rounded-2xl p-6 space-y-3 text-center">
+          <h1 className="text-lg font-bold">We couldn’t load your profile</h1>
+          <p className="text-sm text-ink-muted">
+            Check that the project SQL has been applied, then try again.
+          </p>
+          <div className="flex gap-2 justify-center">
+            <button
+              type="button"
+              onClick={() => refreshProfile()}
+              className="min-h-[44px] px-4 rounded-xl bg-action text-white text-sm font-semibold"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={signOut}
+              className="min-h-[44px] px-4 rounded-xl border border-line text-sm font-semibold"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 4) Role not chosen yet: the one-time role picker.
+  if (!role) {
+    return <RolePicker />;
   }
 
   return (

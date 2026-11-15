@@ -1,19 +1,18 @@
 import { useApp } from '../../context/AppContext';
-import { PenLine, Smile, CheckCircle2 } from 'lucide-react';
+import { PenLine, CheckCircle2 } from 'lucide-react';
 
-// "How to write" and "How to say" buttons for any lesson clip item.
+// "How to write" button for any lesson clip item.
 export const LessonClipButtons = ({ item, onOpen }) => {
   const { student, uiLanguage } = useApp();
   const isEn = uiLanguage === 'en';
   const watched = student.lessonClips?.[item.key] || {};
 
   const buttons = [
-    { type: 'write', icon: PenLine, label: isEn ? 'How to write' : 'કેવી રીતે લખવું' },
-    { type: 'say', icon: Smile, label: isEn ? 'How to say' : 'કેવી રીતે બોલવું' }
+    { type: 'write', icon: PenLine, label: isEn ? 'How to write' : 'કેવી રીતે લખવું' }
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid gap-2">
       {buttons.map(b => (
         <button
           key={b.type}

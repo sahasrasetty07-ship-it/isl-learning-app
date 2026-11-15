@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { mathLessons, generateProblem } from '../../data/mathLessons';
 import { AssignmentBanner } from '../common/AssignmentBanner';
-import { PageHeader, Tabs, Chip, Card, IconButton, SignVideoButton, Button } from '../ui';
+import { PageHeader, Tabs, Chip, Card, SignVideoButton, Button } from '../ui';
 import {
   Calculator,
   Table,
   HelpCircle,
-  Volume2,
   CheckCircle2,
   XCircle,
   Hand,
@@ -25,6 +24,9 @@ export const MathModule = () => {
   const [subTab, setSubTab] = useState(assignedType ? 'practice' : 'tables');
   const [selectedTable, setSelectedTable] = useState(mathLessons.tables[0]);
   const [selectedOp, setSelectedOp] = useState(mathLessons.operations[0]);
+
+  // Try-it-yourself values entered on the operations card (kept when switching operation)
+  const [opValues, setOpValues] = useState({ a: '', b: '' });
   
   // Practice quiz state: endless generated problems, answered on a Gujarati digit keypad
   const [practiceType, setPracticeType] = useState(assignedType || 'mixed');
@@ -61,6 +63,22 @@ export const MathModule = () => {
     setProblemCount(c => c + 1);
     newProblem();
   };
+
+  // Live result for the operation currently shown
+  const opA = opValues.a === '' ? null : Number(opValues.a);
+  const opB = opValues.b === '' ? null : Number(opValues.b);
+  const opHasValues = opA !== null && opB !== null && Number.isFinite(opA) && Number.isFinite(opB);
+  const opDivideByZero = selectedOp.id === 'division' && opB === 0;
+
+  let opResult = null;
+  if (opHasValues && !opDivideByZero) {
+    if (selectedOp.id === 'addition') opResult = opA + opB;
+    else if (selectedOp.id === 'subtraction') opResult = opA - opB;
+    else if (selectedOp.id === 'multiplication') opResult = opA * opB;
+    else if (selectedOp.id === 'division') opResult = opA / opB;
+  }
+
+  const formatOpNumber = (n) => String(Number.isInteger(n) ? n : Number(n.toFixed(2)));
 
   return (
     <div className="space-y-5">
@@ -127,9 +145,6 @@ export const MathModule = () => {
                     <p className="text-sm text-ink-muted">{row.speech} ({row.eng})</p>
                   </div>
                   <span className="text-sm font-semibold tabular-nums px-2 py-1 rounded-lg bg-surface border border-line">{row.result}</span>
-                  <IconButton onClick={() => speakText(row.speech)} label={isEn ? 'Say it' : 'બોલો'}>
-                    <Volume2 className="w-5 h-5" aria-hidden="true" />
-                  </IconButton>
                 </li>
               ))}
             </ul>
@@ -167,14 +182,54 @@ export const MathModule = () => {
                 <h2 className="text-2xl font-bold">{selectedOp.title}</h2>
                 <p className="text-ink-muted mt-1">{selectedOp.concept}</p>
               </div>
-              <IconButton onClick={() => speakText(selectedOp.title)} label={isEn ? 'Say it' : 'બોલો'}>
-                <Volume2 className="w-5 h-5" aria-hidden="true" />
-              </IconButton>
             </div>
 
             <div className="rounded-xl bg-maths-soft p-4">
               <p className="text-sm font-semibold text-maths">{isEn ? 'Example' : 'ઉદાહરણ'}</p>
               <p className="font-heading text-3xl font-bold tracking-wide mt-1">{selectedOp.example}</p>
+            </div>
+
+            {/* Try it yourself: enter two numbers and see the live result */}
+            <div className="rounded-xl bg-canvas border border-line p-4 space-y-3">
+              <h3 className="font-sans text-sm font-bold">{isEn ? 'Try it yourself' : 'જાતે પ્રયત્ન કરો'}</h3>
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={opValues.a}
+                  onChange={e => setOpValues(v => ({ ...v, a: e.target.value }))}
+                  aria-label={isEn ? 'First number' : 'પહેલી સંખ્યા'}
+                  placeholder={isEn ? 'Number' : 'સંખ્યા'}
+                  className="w-24 sm:w-28 min-h-[52px] text-center font-heading text-2xl font-bold rounded-xl border-2 border-line bg-surface focus:outline-none focus:border-maths tabular-nums"
+                />
+                <span className="font-heading text-3xl font-bold text-maths" aria-hidden="true">{selectedOp.symbol}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={opValues.b}
+                  onChange={e => setOpValues(v => ({ ...v, b: e.target.value }))}
+                  aria-label={isEn ? 'Second number' : 'બીજી સંખ્યા'}
+                  placeholder={isEn ? 'Number' : 'સંખ્યા'}
+                  className="w-24 sm:w-28 min-h-[52px] text-center font-heading text-2xl font-bold rounded-xl border-2 border-line bg-surface focus:outline-none focus:border-maths tabular-nums"
+                />
+                <span className="font-heading text-3xl font-bold text-ink-muted" aria-hidden="true">=</span>
+                <div
+                  aria-live="polite"
+                  className={`min-w-[96px] min-h-[52px] px-3 rounded-xl border-2 flex items-center justify-center font-heading text-2xl font-bold tabular-nums ${
+                    opDivideByZero
+                      ? 'bg-danger-soft border-danger text-danger'
+                      : opResult !== null
+                      ? 'bg-maths-soft border-maths text-maths'
+                      : 'bg-surface border-line text-ink-muted'
+                  }`}
+                >
+                  {opDivideByZero
+                    ? (isEn ? 'Cannot divide by 0' : '૦ વડે ભાગ ન થાય')
+                    : opResult !== null
+                    ? formatOpNumber(opResult)
+                    : '?'}
+                </div>
+              </div>
             </div>
 
             <div className="rounded-xl bg-canvas border border-line p-4 flex items-start gap-3">
@@ -207,9 +262,6 @@ export const MathModule = () => {
               <span className="text-sm font-bold px-3 py-1 rounded-lg bg-maths-soft text-maths">
                 {isEn ? `Question ${problemCount}` : `પ્રશ્ન ${problemCount}`}
               </span>
-              <IconButton onClick={() => speakText(currentProblem.questionGujarati)} label={isEn ? 'Listen to question' : 'પ્રશ્ન બોલો'}>
-                <Volume2 className="w-5 h-5" aria-hidden="true" />
-              </IconButton>
             </div>
 
             <div className="rounded-2xl bg-canvas border border-line p-6 text-center space-y-2">
