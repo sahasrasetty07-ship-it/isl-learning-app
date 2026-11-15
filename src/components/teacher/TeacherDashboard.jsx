@@ -133,9 +133,9 @@ export const TeacherDashboard = () => {
     const progress = progressById[s.student_id] || {};
     return {
       ...s,
-      stars: Number(s.total_stars ?? progress.totalStars) || 0,
-      streak: Number(s.current_streak ?? progress.currentStreak) || 0,
-      updated: s.updated_at || progress.updatedAt
+      stars: Math.max(Number(s.total_stars) || 0, Number(progress.totalStars) || 0),
+      streak: Math.max(Number(s.current_streak) || 0, Number(progress.currentStreak) || 0),
+      updated: progress.updatedAt || s.updated_at
     };
   });
 

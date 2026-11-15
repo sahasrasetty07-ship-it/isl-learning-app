@@ -2,6 +2,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { computeReportStats } from '../../lib/reportStats';
 import { SubjectList } from './LearnHub';
+import { MyCodeCard } from '../linking/MyCodeCard';
 import { Card, CardTitle, ProgressBar, Button, SUBJECT_STYLES } from '../ui';
 import {
   Star,
@@ -15,8 +16,8 @@ import {
 const SUBJECT_KEY_BY_LABEL = { 'ગુજરાતી': 'gujarati', 'ગણિત': 'math', 'વિજ્ઞાન': 'science' };
 
 export const StudentDashboard = () => {
-  const { student, setActiveTab, startAssignment, uiLanguage } = useApp();
-  const { profile } = useAuth();
+  const { student, setActiveTab, startAssignment, showToast, uiLanguage } = useApp();
+  const { profile, isConfigured } = useAuth();
   const openAssignments = student.pendingAssignments.filter(a => a.status !== 'પૂર્ણ');
   const isEn = uiLanguage === 'en';
   const stats = computeReportStats(student, profile);
@@ -50,6 +51,11 @@ export const StudentDashboard = () => {
           </span>
         </div>
       </div>
+
+      {/* Student linking code for parents and teachers */}
+      {isConfigured && profile?.role === 'student' && (
+        <MyCodeCard isEn={isEn} showToast={showToast} />
+      )}
 
       {/* Continue */}
       <Card className="space-y-4">

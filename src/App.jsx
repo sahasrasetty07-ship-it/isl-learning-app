@@ -104,7 +104,7 @@ const MainContent = () => {
 
       {/* Main Role Content */}
       <main className="flex-1">
-        {renderRoleScreen()}
+        {content}
       </main>
 
       {/* Global Sign Video Modal */}
