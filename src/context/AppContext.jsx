@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { initialStudentData, classStudents } from '../data/studentAnalytics';
 import { isClipItemComplete } from '../data/lessonClips';
 import { getLocalDateString, calculateStreak } from '../lib/dateUtils';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { createProgressSaver, loadProgress, migrateLocalStorage, mergeProgress } from '../lib/progress';
 import { useAuth } from './AuthContext';
 
 const AppContext = createContext();
@@ -14,7 +16,7 @@ export const DEFAULT_WRITING_THRESHOLD = 85;
 export { getLocalDateString, calculateStreak };
 
 export const AppProvider = ({ children }) => {
-  const { profile, isAllAccess } = useAuth();
+  const { profile, isAllAccess, user } = useAuth();
 
   // Permitted roles in the app. The role itself always comes from the profile;
   // there is deliberately no fallback role here.
@@ -85,6 +87,46 @@ export const AppProvider = ({ children }) => {
   });
   useEffect(() => {
     localStorage.setItem(STUDENT_KEY, JSON.stringify(student));
+  }, [student]);
+
+  // Supabase progress sync (students only). Parents and teachers read the
+  // student's row through their own read-only queries.
+  const saverRef = useRef(null);
+  const hydratedRef = useRef(false);
+  const userId = user?.id;
+  const isStudentProfile = profile?.role === 'student';
+
+  useEffect(() => {
+    hydratedRef.current = false;
+    saverRef.current = null;
+    if (!isSupabaseConfigured || !userId || !isStudentProfile) return undefined;
+
+    let cancelled = false;
+    const saver = createProgressSaver(userId);
+    saverRef.current = saver;
+
+    (async () => {
+      // Move an older browser-only save into the database once.
+      await migrateLocalStorage(userId);
+      const { data } = await loadProgress(userId);
+      if (cancelled) return;
+      if (data) setStudent(prev => mergeProgress(prev, data));
+      hydratedRef.current = true;
+    })();
+
+    const flush = () => saver.flush();
+    window.addEventListener('pagehide', flush);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [userId, isStudentProfile]);
+
+  // Debounced write: 2 s after the last change.
+  useEffect(() => {
+    if (!hydratedRef.current || !saverRef.current) return;
+    saverRef.current.queue(student);
   }, [student]);
 
   // Track active time simply: while the tab is visible, add 30 seconds to

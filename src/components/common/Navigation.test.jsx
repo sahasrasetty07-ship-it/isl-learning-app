@@ -1,92 +1,97 @@
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { Navigation, NAV_ITEMS } from './Navigation';
+import { Navigation } from './Navigation';
+import { navItemsForRole, NAV_BY_ROLE, safeTabForRole, isTabAllowed } from '../../config/navigation';
 import * as AppContextModule from '../../context/AppContext';
 
 vi.mock('../../context/AppContext', () => ({
   useApp: vi.fn(),
 }));
 
-describe('Navigation component', () => {
-  const mockSetActiveTab = vi.fn();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
+const mockApp = (overrides = {}) => {
+  AppContextModule.useApp.mockReturnValue({
+    activeTab: 'dashboard',
+    setActiveTab: vi.fn(),
+    uiLanguage: 'en',
+    currentRole: 'student',
+    ...overrides
   });
+};
 
-  it('renders all 6 navigation items with exact ids in order', () => {
-    AppContextModule.useApp.mockReturnValue({
-      activeTab: 'dashboard',
-      setActiveTab: mockSetActiveTab,
-      uiLanguage: 'en',
-    });
+describe('Navigation component', () => {
+  beforeEach(() => vi.clearAllMocks());
 
+  it('renders the six student tabs in order', () => {
+    mockApp();
     render(<Navigation />);
 
-    const expectedIds = ['dashboard', 'gujarati', 'math', 'science', 'translator', 'report'];
-    expect(NAV_ITEMS.map((item) => item.id)).toEqual(expectedIds);
+    expect(navItemsForRole('student').map(i => i.id)).toEqual([
+      'dashboard', 'gujarati', 'math', 'science', 'translator', 'report'
+    ]);
+    expect(screen.getAllByRole('button')).toHaveLength(6);
+    ['Home', 'Gujarati', 'Math', 'Science', 'Translate', 'Report'].forEach(label => {
+      expect(screen.getByText(label)).toBeDefined();
+    });
+  });
 
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(6);
-
+  it('renders only the parent tabs for a parent', () => {
+    mockApp({ currentRole: 'parent' });
+    render(<Navigation />);
+    expect(screen.getAllByRole('button')).toHaveLength(3);
     expect(screen.getByText('Home')).toBeDefined();
-    expect(screen.getByText('Gujarati')).toBeDefined();
-    expect(screen.getByText('Math')).toBeDefined();
-    expect(screen.getByText('Science')).toBeDefined();
-    expect(screen.getByText('Translate')).toBeDefined();
     expect(screen.getByText('Report')).toBeDefined();
+    expect(screen.queryByText('Gujarati')).toBeNull();
+  });
+
+  it('renders the teacher tabs including practice', () => {
+    mockApp({ currentRole: 'teacher' });
+    render(<Navigation />);
+    expect(screen.getAllByRole('button')).toHaveLength(4);
+    expect(screen.getByText('Practice')).toBeDefined();
+    expect(screen.queryByText('Science')).toBeNull();
   });
 
   it('sets aria-current="page" on the active item only', () => {
-    AppContextModule.useApp.mockReturnValue({
-      activeTab: 'translator',
-      setActiveTab: mockSetActiveTab,
-      uiLanguage: 'en',
-    });
-
+    mockApp({ activeTab: 'translator' });
     render(<Navigation />);
-
-    const translateButton = screen.getByText('Translate').closest('button');
-    expect(translateButton.getAttribute('aria-current')).toBe('page');
-
-    const homeButton = screen.getByText('Home').closest('button');
-    expect(homeButton.getAttribute('aria-current')).toBeNull();
+    expect(screen.getByText('Translate').closest('button').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByText('Home').closest('button').getAttribute('aria-current')).toBeNull();
   });
 
   it('clicking an item calls setActiveTab with the exact tab id', () => {
-    AppContextModule.useApp.mockReturnValue({
-      activeTab: 'dashboard',
-      setActiveTab: mockSetActiveTab,
-      uiLanguage: 'en',
-    });
-
+    const setActiveTab = vi.fn();
+    mockApp({ setActiveTab });
     render(<Navigation />);
-
     fireEvent.click(screen.getByText('Math'));
-    expect(mockSetActiveTab).toHaveBeenCalledWith('math');
-
+    expect(setActiveTab).toHaveBeenCalledWith('math');
     fireEvent.click(screen.getByText('Gujarati'));
-    expect(mockSetActiveTab).toHaveBeenCalledWith('gujarati');
-
-    fireEvent.click(screen.getByText('Science'));
-    expect(mockSetActiveTab).toHaveBeenCalledWith('science');
+    expect(setActiveTab).toHaveBeenCalledWith('gujarati');
   });
 
   it('renders Gujarati labels when uiLanguage is gu', () => {
-    AppContextModule.useApp.mockReturnValue({
-      activeTab: 'dashboard',
-      setActiveTab: mockSetActiveTab,
-      uiLanguage: 'gu',
-    });
-
+    mockApp({ uiLanguage: 'gu' });
     render(<Navigation />);
+    ['હોમ', 'ગુજરાતી', 'ગણિત', 'વિજ્ઞાન', 'અનુવાદ', 'પ્રગતિ'].forEach(label => {
+      expect(screen.getByText(label)).toBeDefined();
+    });
+  });
+});
 
-    expect(screen.getByText('હોમ')).toBeDefined();
-    expect(screen.getByText('ગુજરાતી')).toBeDefined();
-    expect(screen.getByText('ગણિત')).toBeDefined();
-    expect(screen.getByText('વિજ્ઞાન')).toBeDefined();
-    expect(screen.getByText('અનુવાદ')).toBeDefined();
-    expect(screen.getByText('પ્રગતિ')).toBeDefined();
+describe('NAV_BY_ROLE allow-list', () => {
+  it('keeps every tab id unchanged', () => {
+    expect(NAV_BY_ROLE.student).toEqual(['dashboard', 'gujarati', 'math', 'science', 'translator', 'report']);
+    expect(NAV_BY_ROLE.parent).toEqual(['dashboard', 'report', 'translator']);
+    expect(NAV_BY_ROLE.teacher).toEqual(['dashboard', 'report', 'assignments', 'translator']);
+  });
+
+  it('falls back to dashboard for forbidden or unknown tabs', () => {
+    expect(safeTabForRole('parent', 'math')).toBe('dashboard');
+    expect(safeTabForRole('teacher', 'science')).toBe('dashboard');
+    expect(safeTabForRole('student', 'assignments')).toBe('dashboard');
+    expect(safeTabForRole('student', 'nonsense')).toBe('dashboard');
+    expect(safeTabForRole(undefined, 'report')).toBe('dashboard');
+    expect(safeTabForRole('teacher', 'assignments')).toBe('assignments');
+    expect(isTabAllowed('parent', 'translator')).toBe(true);
   });
 });

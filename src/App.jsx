@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { useAuth } from './context/AuthContext';
 import { LoginScreen } from './components/auth/LoginScreen';
@@ -14,7 +14,8 @@ import { ReportCard } from './components/student/ReportCard';
 import { TranslatorHub } from './components/translation/TranslatorHub';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard';
 import { ParentDashboard } from './components/parent/ParentDashboard';
-import { Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import { safeTabForRole } from './config/navigation';
 
 const LoadingSpinner = () => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -40,13 +41,17 @@ const LoadingSpinner = () => (
 );
 
 const MainContent = () => {
-  const { currentRole, activeTab, toastMessage } = useApp();
+  const { currentRole, activeTab, setActiveTab, toastMessage } = useApp();
 
-  // Student active tab view with fallback
-  const STUDENT_TABS = ['dashboard', 'gujarati', 'math', 'science', 'translator', 'report'];
+  // Per-role allow-list; an unknown tab always falls back to the home tab.
+  const tab = safeTabForRole(currentRole, activeTab);
+
+  useEffect(() => {
+    if (tab !== activeTab) setActiveTab(tab);
+  }, [tab, activeTab, setActiveTab]);
+
   const renderStudentView = () => {
-    const safeTab = STUDENT_TABS.includes(activeTab) ? activeTab : 'dashboard';
-    switch (safeTab) {
+    switch (tab) {
       case 'gujarati':
         return <GujaratiModule />;
       case 'math':
@@ -63,37 +68,27 @@ const MainContent = () => {
     }
   };
 
-  // Render role-specific screen: strictly Student, Teacher, or Parent
   const renderRoleScreen = () => {
-    if (currentRole === 'teacher') {
-      return (
-        <div className="max-w-5xl mx-auto p-4 sm:p-6">
-          <TeacherDashboard />
-        </div>
-      );
-    }
-
     if (currentRole === 'parent') {
-      return (
-        <div className="max-w-4xl mx-auto p-4 sm:p-6">
-          <ParentDashboard />
-        </div>
-      );
+      return tab === 'translator' ? <TranslatorHub /> : <ParentDashboard />;
     }
+    if (currentRole === 'teacher') {
+      return tab === 'translator' ? <TranslatorHub /> : <TeacherDashboard />;
+    }
+    return renderStudentView();
+  };
 
-    // Default: Student Learning Experience (PC / responsive layout)
-    // The student bottom Navigation is rendered ONLY for the student view.
-    return (
-      <div className="max-w-5xl mx-auto p-4 sm:p-8 pb-24 sm:pb-28 relative">
-        {renderStudentView()}
-        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md shadow-sm">
-          <div className="max-w-lg mx-auto">
-            <Navigation />
-          </div>
+  // One layout for every role, with the same bottom bar.
+  const content = (
+    <div className="max-w-5xl mx-auto p-4 sm:p-8 pb-24 sm:pb-28 relative">
+      {renderRoleScreen()}
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md shadow-sm print-hide">
+        <div className="max-w-lg mx-auto">
+          <Navigation />
         </div>
       </div>
-    );
-  };
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50/90 flex flex-col text-slate-900 selection:bg-amber-200 selection:text-amber-900 relative overflow-x-hidden">
