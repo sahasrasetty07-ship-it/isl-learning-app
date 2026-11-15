@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { normalizeHandLandmarks, validatePredictionStability } from '../../utils/landmarkNormalizer';
 import { speak, isTTSSupported, stopSpeaking } from '../../utils/speech';
+import { HAND_SIGNS, classifyHand, stepHold } from '../../utils/handSigns';
 import {
   Camera,
   CameraOff,
@@ -60,6 +61,15 @@ export const SignRecognition = () => {
   // Rolling 30 frames of 63 floats for dynamic window
   const frameWindowRef = useRef([]);
 
+  // Hand-shape fallback (no trained model): current mode for the camera loop, and how long the shape has been held
+  const recognitionModeRef = useRef(recognitionMode);
+  const holdRef = useRef({ sign: null, since: 0, fired: false });
+  useEffect(() => {
+    recognitionModeRef.current = recognitionMode;
+    holdRef.current = { sign: null, since: 0, fired: false };
+    setActivePrediction(null);
+  }, [recognitionMode]);
+
   // Confirmed text buffer (User-confirmed signs only)
   const [confirmedSigns, setConfirmedSigns] = useState(['નમસ્તે']);
   const [isEditingBuffer, setIsEditingBuffer] = useState(false);
@@ -112,8 +122,8 @@ export const SignRecognition = () => {
           setModelStatus('missing');
           setModelMessage(
             isEn
-              ? 'Recognition model not trained yet. Camera mirror and real-time landmark tracking remain fully functional.'
-              : 'સાઇન ઓળખ મોડેલ હજુ તાલીમબદ્ધ નથી. કેમેરા મિરર અને રીઅલ-ટાઇમ લેન્ડમાર્ક ટ્રેકિંગ સક્રિય રહેશે.'
+              ? 'Recognition model not trained yet. Until it is, Static mode recognises only the hand shapes listed below; Dynamic mode needs the trained model.'
+              : 'સાઇન ઓળખ મોડેલ હજુ તાલીમબદ્ધ નથી. ત્યાં સુધી સ્ટેટિક મોડ ફક્ત નીચે આપેલા હાથના આકાર ઓળખે છે; ડાયનેમિક મોડ માટે તાલીમબદ્ધ મોડેલ જરૂરી છે.'
           );
         }
       }
@@ -272,6 +282,9 @@ export const SignRecognition = () => {
           // Step 5C & 5D: Model classification
           if (tfModelRef.current && normalized63.length === 63) {
             handleModelInference(normalized63);
+          } else if (recognitionModeRef.current === 'static') {
+            // No model trained: recognise only the few static shapes that hand landmarks tell apart reliably
+            handleHandShape(results.worldLandmarks?.[0]);
           } else {
             // No model trained: never fake predictions
             setRecognitionStatusText('model-missing');
@@ -280,6 +293,7 @@ export const SignRecognition = () => {
           // No hand detected in frame
           setRecognitionStatusText('no-hand');
           recentPredictionsRef.current = [];
+          holdRef.current = { sign: null, since: 0, fired: false };
           setActivePrediction(null);
         }
       }
@@ -402,6 +416,24 @@ export const SignRecognition = () => {
       });
     } catch (err) {
       console.warn('Inference error:', err);
+    }
+  };
+
+  // ----------------------------------------------------------------------------
+  // Hand-shape fallback while no model is trained. worldLandmarks are in metres, so the
+  // video's aspect ratio does not skew finger lengths. A shape held steady for a moment becomes
+  // the detected sign; the user still confirms it before it is added. No confidence number is shown.
+  // ----------------------------------------------------------------------------
+  const handleHandShape = (worldLandmarks) => {
+    const shape = classifyHand(worldLandmarks);
+    const { state, commit } = stepHold(holdRef.current, shape?.id ?? null, performance.now());
+    holdRef.current = state;
+    if (commit) {
+      setActivePrediction({ label: shape.word, confidence: null, glyph: shape.glyph });
+      setRecognitionStatusText('recognized');
+    } else if (!state.fired) {
+      setActivePrediction(null);
+      setRecognitionStatusText(shape ? 'shape-holding' : 'unrecognized');
     }
   };
 
@@ -553,6 +585,20 @@ export const SignRecognition = () => {
           </div>
         )}
 
+        {/* The only signs recognised without a trained model */}
+        {modelStatus === 'missing' && recognitionMode === 'static' && (
+          <ul className="grid grid-cols-2 sm:grid-cols-4 gap-1.5" aria-label={isEn ? 'Hand shapes recognised without a trained model' : 'મોડેલ વગર ઓળખાતા હાથના આકાર'}>
+            {HAND_SIGNS.map(sign => (
+              <li key={sign.id} className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-xs">
+                <span lang="gu" className="font-black text-white">
+                  <span aria-hidden="true" className="mr-1">{sign.glyph}</span>{sign.word}
+                </span>
+                <span className="block text-slate-400">{isEn ? sign.howEn : sign.howGu}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
         {/* Mirrored Camera Viewport + Live MediaPipe Canvas Overlay */}
         <div className="relative w-full aspect-video max-h-[360px] bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800">
           {/* Mirrored Video Stream */}
@@ -611,6 +657,10 @@ export const SignRecognition = () => {
                       ? isEn
                         ? 'Place hand in frame'
                         : 'હાથ કેમેરા સામે રાખો'
+                      : recognitionStatusText === 'shape-holding'
+                      ? isEn
+                        ? 'Hold the shape steady…'
+                        : 'આકાર સ્થિર રાખો…'
                       : isEn
                       ? 'Sign not recognized'
                       : 'સંકેત ઓળખાયો નથી'}
@@ -618,7 +668,12 @@ export const SignRecognition = () => {
                 )}
               </div>
 
-              {activePrediction && (
+              {activePrediction && activePrediction.confidence === null && (
+                <div className="text-[10px] text-slate-300">
+                  {isEn ? 'Hand-shape rule · held steady' : 'હાથના આકારનો નિયમ · સ્થિર'}
+                </div>
+              )}
+              {activePrediction && activePrediction.confidence !== null && (
                 <div className="flex items-center gap-2 text-[10px] text-slate-300">
                   <span>
                     {isEn ? 'Confidence:' : 'ચોકસાઈ:'}{' '}
@@ -651,7 +706,9 @@ export const SignRecognition = () => {
               <span lang="gu" className="text-base font-black text-white">
                 {activePrediction.label}{' '}
                 <span className="text-xs font-medium text-amber-400">
-                  ({(activePrediction.confidence * 100).toFixed(1)}%)
+                  {activePrediction.confidence === null
+                    ? (isEn ? '(hand-shape rule)' : '(હાથના આકારનો નિયમ)')
+                    : `(${(activePrediction.confidence * 100).toFixed(1)}%)`}
                 </span>
               </span>
             </div>
